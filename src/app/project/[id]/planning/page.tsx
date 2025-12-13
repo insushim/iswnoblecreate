@@ -68,6 +68,14 @@ const writingStyles = [
   { value: 'humorous', label: '유머러스' },
 ];
 
+const novelLengths = [
+  { value: 50000, label: '단편 (5만자)', chapters: 5, characters: 5 },
+  { value: 100000, label: '중편 (10만자)', chapters: 10, characters: 8 },
+  { value: 200000, label: '장편 (20만자)', chapters: 20, characters: 12 },
+  { value: 500000, label: '대작 (50만자)', chapters: 50, characters: 15 },
+  { value: 1000000, label: '시리즈급 (100만자)', chapters: 100, characters: 20 },
+];
+
 export default function PlanningPage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -99,6 +107,7 @@ export default function PlanningPage() {
   const [generatingType, setGeneratingType] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
+  const [targetNovelLength, setTargetNovelLength] = useState(200000);
   const [autoGenerateProgress, setAutoGenerateProgress] = useState<{
     step: string;
     current: number;
@@ -369,11 +378,15 @@ JSON 형식:
 
       // 5단계: 캐릭터 생성
       setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 5, total: totalSteps });
-      const characterPrompt = `다음 소설 정보를 바탕으로 주요 캐릭터 4명을 JSON 배열로 생성해주세요.
+      const selectedLength = novelLengths.find(l => l.value === targetNovelLength) || novelLengths[2];
+      const numCharacters = selectedLength.characters;
+
+      const characterPrompt = `다음 소설 정보를 바탕으로 주요 캐릭터 ${numCharacters}명을 JSON 배열로 생성해주세요.
 
 제목: ${title}
 컨셉: ${concept}
 시놉시스: ${newSynopsis}
+목표 분량: ${selectedLength.label}
 
 JSON 형식:
 [
@@ -392,7 +405,14 @@ JSON 형식:
   ...
 ]
 
-역할(role): protagonist(주인공 1명), antagonist(악역 1명), deuteragonist(조연주인공 1명), supporting(조연 1명)`;
+역할 배분 (총 ${numCharacters}명):
+- protagonist(주인공): 1-2명
+- antagonist(악역/적대자): 1-2명
+- deuteragonist(조연 주인공/히로인): 1-2명
+- supporting(주요 조연): ${Math.max(2, numCharacters - 6)}명
+- minor(단역/엑스트라): 나머지
+
+각 캐릭터는 개성있는 이름과 뚜렷한 성격을 가져야 합니다.`;
 
       const characterResult = await generateJSON<Array<{
         name: string;
@@ -473,16 +493,20 @@ JSON 형식:
 
       // 7단계: 챕터 구조 생성
       setAutoGenerateProgress({ step: '챕터 구조 생성 중...', current: 7, total: totalSteps });
-      const chapterPrompt = `다음 소설 정보를 바탕으로 10개 챕터 구조를 JSON 배열로 생성해주세요.
+      const numChapters = selectedLength.chapters;
+      const chapterPrompt = `다음 소설 정보를 바탕으로 ${numChapters}개 챕터 구조를 JSON 배열로 생성해주세요.
 
 시놉시스: ${newSynopsis}
 상세 시놉시스: ${newDetailed}
+목표 분량: ${selectedLength.label} (총 ${numChapters}장)
 
 JSON 형식:
 [
   {"number": 1, "title": "제목", "purpose": "이 챕터의 목적", "keyEvents": ["주요 사건1", "주요 사건2"]},
   ...
-]`;
+]
+
+각 챕터는 스토리 진행에 맞게 기승전결 구조를 따르고, 제목은 흥미를 끄는 것으로 작성해주세요.`;
 
       const chapterResult = await generateJSON<Array<{
         number: number;
@@ -601,6 +625,22 @@ JSON 형식:
                   컨셉만 입력하면 로그라인, 시놉시스, 세계관, 캐릭터, 플롯, 챕터까지 모두 AI가 생성합니다.
                   생성 후 각 메뉴에서 내용을 확인하고 수정하세요.
                 </p>
+                {/* 목표 분량 선택 */}
+                <div className="flex items-center gap-3 mt-3">
+                  <Label className="text-sm whitespace-nowrap">목표 분량:</Label>
+                  <Select value={targetNovelLength.toString()} onValueChange={(v) => setTargetNovelLength(Number(v))}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {novelLengths.map((length) => (
+                        <SelectItem key={length.value} value={length.value.toString()}>
+                          {length.label} ({length.chapters}장, {length.characters}명)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               {concept && (
                 <Button onClick={handleAutoGenerateAll} disabled={isAutoGenerating} className="gap-2">
