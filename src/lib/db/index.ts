@@ -80,7 +80,7 @@ export async function initializeAppSettings(): Promise<AppSettings> {
     autoSaveInterval: 30,
     soundEffects: false,
     notifications: true,
-    geminiApiKey: 'AIzaSyCGQgZjk4jBdLtv4YKDNsClVArSTwZbzTI',
+    geminiApiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
   };
 
   await db.appSettings.add(defaultSettings);
