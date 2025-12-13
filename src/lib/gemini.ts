@@ -25,7 +25,7 @@ export async function generateText(
 ): Promise<string> {
   const ai = initGemini(apiKey);
   const model = ai.getGenerativeModel({
-    model: 'gemini-2.5-flash-preview-05-20',
+    model: 'gemini-3-pro-preview',
     generationConfig: {
       temperature: options?.temperature ?? 0.8,
       maxOutputTokens: options?.maxTokens ?? 8192,
@@ -52,7 +52,7 @@ export async function* generateTextStream(
 ): AsyncGenerator<string, void, unknown> {
   const ai = initGemini(apiKey);
   const model = ai.getGenerativeModel({
-    model: 'gemini-2.5-flash-preview-05-20',
+    model: 'gemini-3-pro-preview',
     generationConfig: {
       temperature: options?.temperature ?? 0.8,
       maxOutputTokens: options?.maxTokens ?? 8192,
