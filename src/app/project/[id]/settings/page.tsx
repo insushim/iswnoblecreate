@@ -42,7 +42,7 @@ export default function ProjectSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [title, setTitle] = useState('');
-  const [status, setStatus] = useState<'planning' | 'writing' | 'editing' | 'completed'>('planning');
+  const [status, setStatus] = useState<'idea' | 'planning' | 'writing' | 'editing' | 'completed'>('planning');
   const [targetWordCount, setTargetWordCount] = useState(100000);
   const [dailyGoal, setDailyGoal] = useState(1000);
   const [autoSave, setAutoSave] = useState(true);
@@ -51,19 +51,27 @@ export default function ProjectSettingsPage() {
     if (currentProject) {
       setTitle(currentProject.title);
       setStatus(currentProject.status);
-      setTargetWordCount(currentProject.targetWordCount || 100000);
-      setDailyGoal(currentProject.dailyGoal || 1000);
+      setTargetWordCount(currentProject.settings?.targetTotalLength || 100000);
+      setDailyGoal(currentProject.goals?.dailyWordCount || 1000);
     }
   }, [currentProject]);
 
   const handleSave = async () => {
+    if (!currentProject) return;
+
     setIsSaving(true);
     try {
       await updateProject(projectId, {
         title,
         status,
-        targetWordCount,
-        dailyGoal,
+        settings: {
+          ...currentProject.settings,
+          targetTotalLength: targetWordCount,
+        },
+        goals: {
+          ...currentProject.goals,
+          dailyWordCount: dailyGoal,
+        },
       });
     } catch (error) {
       console.error('저장 실패:', error);
@@ -121,6 +129,7 @@ export default function ProjectSettingsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="idea">아이디어</SelectItem>
                 <SelectItem value="planning">기획 중</SelectItem>
                 <SelectItem value="writing">집필 중</SelectItem>
                 <SelectItem value="editing">편집 중</SelectItem>

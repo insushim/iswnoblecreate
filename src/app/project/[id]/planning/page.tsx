@@ -328,12 +328,16 @@ export default function PlanningPage() {
         detailedSynopsis: newDetailed.trim(),
         genre: selectedGenres.length > 0 ? selectedGenres : ['판타지', '액션'],
         settings: {
-          ...currentProject?.settings,
-          perspective: perspective as 'first' | 'third-limited' | 'omniscient' | 'second',
           writingStyle: writingStyle as 'calm' | 'elaborate' | 'concise' | 'lyrical' | 'tense' | 'humorous' | 'custom',
+          perspective: perspective as 'first' | 'third-limited' | 'omniscient' | 'second',
+          tense: currentProject?.settings?.tense || 'past',
           dialogueRatio,
           descriptionDetail,
           targetChapterLength,
+          pacingPreference: currentProject?.settings?.pacingPreference || 'moderate',
+          emotionIntensity: currentProject?.settings?.emotionIntensity || 5,
+          language: currentProject?.settings?.language || 'ko',
+          autoSaveInterval: currentProject?.settings?.autoSaveInterval || 30,
         },
       });
 
