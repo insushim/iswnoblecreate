@@ -245,36 +245,52 @@ ${currentProject.settings?.targetChapterLength || 10000}자
         // **강조** 또는 *강조* 제거
         formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
 
-        // 여러 개의 빈 줄을 두 개로 통일 (장면 전환)
-        formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+        // 문장 단위로 분리하여 문단 만들기
+        // 마침표, 물음표, 느낌표, 따옴표 닫힘 뒤에서 분리
+        const sentences = formatted.split(/(?<=[.?!]["'"]?\s*)/);
 
-        // 각 문단에 들여쓰기 추가 (전각 공백)
-        const lines = formatted.split('\n');
-        const processedLines = lines.map(line => {
-          const trimmedLine = line.trim();
-          // 빈 줄은 그대로
-          if (!trimmedLine) return '';
-          // 이미 전각 공백으로 시작하면 그대로
-          if (trimmedLine.startsWith('　')) return trimmedLine;
-          // 일반 공백으로 들여쓰기된 경우 전각 공백으로 변경
-          if (line.startsWith('  ') || line.startsWith('\t')) {
-            return '　' + trimmedLine;
+        const paragraphs: string[] = [];
+        let currentParagraph: string[] = [];
+
+        sentences.forEach((sentence, index) => {
+          const trimmed = sentence.trim();
+          if (!trimmed) return;
+
+          // 대화문 시작이면 새 문단
+          if (trimmed.startsWith('"') || trimmed.startsWith('"') || trimmed.startsWith('「')) {
+            if (currentParagraph.length > 0) {
+              paragraphs.push('　' + currentParagraph.join(' '));
+              currentParagraph = [];
+            }
+            paragraphs.push('　' + trimmed);
           }
-          // 들여쓰기 없는 문단에 전각 공백 추가
-          return '　' + trimmedLine;
+          // 대화문으로 끝나면 해당 문장까지 문단 완성
+          else if (trimmed.endsWith('"') || trimmed.endsWith('"') || trimmed.endsWith('」')) {
+            currentParagraph.push(trimmed);
+            paragraphs.push('　' + currentParagraph.join(' '));
+            currentParagraph = [];
+          }
+          // 3-4문장마다 문단 나누기
+          else {
+            currentParagraph.push(trimmed);
+            if (currentParagraph.length >= 3) {
+              paragraphs.push('　' + currentParagraph.join(' '));
+              currentParagraph = [];
+            }
+          }
         });
 
-        formatted = processedLines.join('\n');
+        // 남은 문장 처리
+        if (currentParagraph.length > 0) {
+          paragraphs.push('　' + currentParagraph.join(' '));
+        }
 
-        // 대화문 앞뒤 빈 줄 보장
-        formatted = formatted.replace(/([^\n])\n(　")/g, '$1\n\n$2');
-        formatted = formatted.replace(/(["'"'])\n(　[^"'])/g, '$1\n\n$2');
-
-        return formatted;
+        // 빈 줄 하나로 문단 구분
+        return paragraphs.join('\n\n');
       };
 
       const formattedResponse = formatNovelText(response);
-      const newContent = content ? content + '\n\n\n' + formattedResponse : formattedResponse;
+      const newContent = content ? content + '\n\n' + formattedResponse : formattedResponse;
       setContent(newContent);
 
       // 자동 저장

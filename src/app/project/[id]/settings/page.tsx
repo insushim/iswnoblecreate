@@ -44,6 +44,7 @@ export default function ProjectSettingsPage() {
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState<'idea' | 'planning' | 'writing' | 'editing' | 'completed'>('planning');
   const [targetWordCount, setTargetWordCount] = useState(100000);
+  const [targetChapterLength, setTargetChapterLength] = useState(10000);
   const [dailyGoal, setDailyGoal] = useState(1000);
   const [autoSave, setAutoSave] = useState(true);
 
@@ -52,6 +53,7 @@ export default function ProjectSettingsPage() {
       setTitle(currentProject.title);
       setStatus(currentProject.status);
       setTargetWordCount(currentProject.settings?.targetTotalLength || 100000);
+      setTargetChapterLength(currentProject.settings?.targetChapterLength || 10000);
       setDailyGoal(currentProject.goals?.dailyWordCount || 1000);
     }
   }, [currentProject]);
@@ -67,6 +69,7 @@ export default function ProjectSettingsPage() {
         settings: {
           ...currentProject.settings,
           targetTotalLength: targetWordCount,
+          targetChapterLength: targetChapterLength,
         },
         goals: {
           ...currentProject.goals,
@@ -159,6 +162,23 @@ export default function ProjectSettingsPage() {
               max={500000}
               step={10000}
             />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>챕터당 목표 글자수</Label>
+              <span className="text-sm text-muted-foreground">{targetChapterLength.toLocaleString()}자</span>
+            </div>
+            <Slider
+              value={[targetChapterLength]}
+              onValueChange={([v]) => setTargetChapterLength(v)}
+              min={3000}
+              max={15000}
+              step={1000}
+            />
+            <p className="text-xs text-muted-foreground">
+              AI 자동 집필 시 각 챕터에 생성될 글자수입니다.
+            </p>
           </div>
 
           <div className="space-y-2">

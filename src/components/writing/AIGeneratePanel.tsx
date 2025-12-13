@@ -187,16 +187,39 @@ ${typeSpecificPrompt}
         formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
         formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
 
-        // 각 문단에 전각 공백 들여쓰기 추가
-        const lines = formatted.split('\n');
-        const processedLines = lines.map(line => {
-          const trimmedLine = line.trim();
-          if (!trimmedLine) return '';
-          if (trimmedLine.startsWith('　')) return trimmedLine;
-          return '　' + trimmedLine;
+        // 문장 단위로 분리하여 문단 만들기
+        const sentences = formatted.split(/(?<=[.?!]["'"]?\s*)/);
+        const paragraphs: string[] = [];
+        let currentParagraph: string[] = [];
+
+        sentences.forEach((sentence) => {
+          const trimmed = sentence.trim();
+          if (!trimmed) return;
+
+          if (trimmed.startsWith('"') || trimmed.startsWith('"') || trimmed.startsWith('「')) {
+            if (currentParagraph.length > 0) {
+              paragraphs.push('　' + currentParagraph.join(' '));
+              currentParagraph = [];
+            }
+            paragraphs.push('　' + trimmed);
+          } else if (trimmed.endsWith('"') || trimmed.endsWith('"') || trimmed.endsWith('」')) {
+            currentParagraph.push(trimmed);
+            paragraphs.push('　' + currentParagraph.join(' '));
+            currentParagraph = [];
+          } else {
+            currentParagraph.push(trimmed);
+            if (currentParagraph.length >= 3) {
+              paragraphs.push('　' + currentParagraph.join(' '));
+              currentParagraph = [];
+            }
+          }
         });
 
-        return processedLines.join('\n');
+        if (currentParagraph.length > 0) {
+          paragraphs.push('　' + currentParagraph.join(' '));
+        }
+
+        return paragraphs.join('\n\n');
       };
 
       setGeneratedContent(formatNovelText(response));
