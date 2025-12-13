@@ -15,6 +15,8 @@ import {
   History,
   Sparkles,
   MessageSquare,
+  Rocket,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +46,10 @@ import { LoadingSpinner, AIThinking } from '@/components/common';
 import { useChapterStore } from '@/stores/chapterStore';
 import { useCharacterStore } from '@/stores/characterStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { useWorldStore } from '@/stores/worldStore';
 import { useUIStore } from '@/stores/uiStore';
+import { generateText } from '@/lib/gemini';
 import { Chapter, Scene } from '@/types';
 
 const statusOptions: { value: Chapter['status']; label: string }[] = [
@@ -64,6 +69,8 @@ export default function ChapterEditorPage() {
   const { currentChapter, currentScene, fetchChapter, updateChapter, createScene, updateScene, setCurrentScene, saveSceneVersion } = useChapterStore();
   const { characters, fetchCharacters } = useCharacterStore();
   const { currentProject } = useProjectStore();
+  const { settings } = useSettingsStore();
+  const { worldSettings, fetchWorldSettings } = useWorldStore();
   const { writingMode, setWritingMode } = useUIStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -72,6 +79,7 @@ export default function ChapterEditorPage() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAutoWriting, setIsAutoWriting] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -79,11 +87,12 @@ export default function ChapterEditorPage() {
       await Promise.all([
         fetchChapter(chapterId),
         fetchCharacters(projectId),
+        fetchWorldSettings(projectId),
       ]);
       setIsLoading(false);
     };
     loadData();
-  }, [chapterId, projectId, fetchChapter, fetchCharacters]);
+  }, [chapterId, projectId, fetchChapter, fetchCharacters, fetchWorldSettings]);
 
   useEffect(() => {
     if (currentChapter?.scenes && currentChapter.scenes.length > 0 && !currentScene) {
@@ -147,6 +156,84 @@ export default function ChapterEditorPage() {
     setShowAIPanel(false);
   };
 
+  // AI 자동 집필 - 전체 챕터 생성
+  const handleAutoWriteChapter = async () => {
+    if (!settings?.geminiApiKey || !currentProject || !currentChapter) return;
+
+    // 씬이 없으면 먼저 생성
+    if (!currentChapter.scenes || currentChapter.scenes.length === 0) {
+      await handleCreateScene();
+    }
+
+    setIsAutoWriting(true);
+    try {
+      const characterInfo = characters
+        .slice(0, 5)
+        .map(c => `- ${c.name} (${c.role}): ${c.personality}\n  배경: ${c.background}`)
+        .join('\n');
+
+      const worldInfo = worldSettings
+        .slice(0, 5)
+        .map(w => `- ${w.title}: ${w.description}`)
+        .join('\n');
+
+      const prompt = `당신은 전문 소설 작가입니다. 다음 설정에 맞춰 이 챕터의 전체 내용을 작성해주세요.
+
+## 작품 정보
+- 제목: ${currentProject.title}
+- 장르: ${currentProject.genre.join(', ')}
+- 컨셉: ${currentProject.concept}
+- 시놉시스: ${currentProject.synopsis}
+
+## 세계관
+${worldInfo || '없음'}
+
+## 등장인물
+${characterInfo || '없음'}
+
+## 챕터 정보
+- 챕터 제목: ${currentChapter.title}
+- 챕터 번호: ${currentChapter.number}장
+- 이 챕터의 목적: ${currentChapter.purpose || '스토리 전개'}
+- 주요 사건: ${currentChapter.keyEvents?.join(', ') || '없음'}
+
+## 이전 내용
+${content.slice(-500) || '(이 챕터가 시작입니다)'}
+
+## 작성 규칙
+1. 한국어로 작성
+2. 소설 문체로 작성 (3인칭 제한 시점 권장)
+3. ${currentProject.settings?.targetChapterLength || 3000}자 내외로 작성
+4. 대화문은 큰따옴표 사용
+5. 자연스러운 문단 구분
+6. 캐릭터의 성격과 말투가 드러나도록
+7. 독자의 몰입을 위해 생생한 묘사 포함
+8. 챕터의 목적과 주요 사건을 반영
+
+이 챕터의 내용을 완성해주세요. 소설 본문만 출력하세요.`;
+
+      const response = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.85,
+        maxTokens: 8000,
+      });
+
+      const newContent = content ? content + '\n\n' + response.trim() : response.trim();
+      setContent(newContent);
+
+      // 자동 저장
+      if (currentScene) {
+        await updateScene(currentScene.id, { content: newContent });
+        setLastSaved(new Date());
+      }
+
+    } catch (error) {
+      console.error('자동 집필 실패:', error);
+      alert('자동 집필 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsAutoWriting(false);
+    }
+  };
+
   const wordCount = content.replace(/\s/g, '').length;
 
   if (isLoading) {
@@ -205,7 +292,25 @@ export default function ChapterEditorPage() {
             <Sparkles className="h-4 w-4" />
           </Button>
 
-          <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+          <Button
+            onClick={handleAutoWriteChapter}
+            disabled={isAutoWriting || !settings?.geminiApiKey}
+            className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+          >
+            {isAutoWriting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                집필 중...
+              </>
+            ) : (
+              <>
+                <Rocket className="h-4 w-4" />
+                AI 자동 집필
+              </>
+            )}
+          </Button>
+
+          <Button onClick={handleSave} disabled={isSaving} variant="outline" className="gap-2">
             {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             저장
           </Button>

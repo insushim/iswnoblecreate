@@ -17,6 +17,8 @@ import {
   Shield,
   Swords,
   Heart,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,6 +53,9 @@ import { CharacterForm } from '@/components/characters/CharacterForm';
 import { CharacterProfile } from '@/components/characters/CharacterProfile';
 import { CharacterInterview } from '@/components/characters/CharacterInterview';
 import { useCharacterStore } from '@/stores/characterStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { generateJSON } from '@/lib/gemini';
 import { Character } from '@/types';
 
 const roleIcons: Record<Character['role'], React.ElementType> = {
@@ -85,7 +90,9 @@ export default function CharactersPage() {
   const router = useRouter();
   const projectId = params.id as string;
 
-  const { characters, isLoading, fetchCharacters, deleteCharacter } = useCharacterStore();
+  const { characters, isLoading, fetchCharacters, deleteCharacter, createCharacter } = useCharacterStore();
+  const { currentProject } = useProjectStore();
+  const { settings } = useSettingsStore();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
@@ -93,6 +100,7 @@ export default function CharactersPage() {
   const [interviewCharacter, setInterviewCharacter] = useState<Character | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [characterToDelete, setCharacterToDelete] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -105,6 +113,101 @@ export default function CharactersPage() {
       await deleteCharacter(characterToDelete);
       setDeleteDialogOpen(false);
       setCharacterToDelete(null);
+    }
+  };
+
+  // AI 캐릭터 자동 생성
+  const handleAutoGenerateCharacters = async () => {
+    if (!settings?.geminiApiKey || !currentProject) return;
+
+    setIsGenerating(true);
+    try {
+      const prompt = `다음 소설 정보를 바탕으로 주요 캐릭터 4명을 JSON 배열로 생성해주세요.
+
+## 작품 정보
+- 제목: ${currentProject.title}
+- 장르: ${currentProject.genre.join(', ')}
+- 컨셉: ${currentProject.concept}
+- 시놉시스: ${currentProject.synopsis}
+
+## 기존 캐릭터
+${characters.map(c => `- ${c.name} (${roleLabels[c.role]})`).join('\n') || '없음'}
+
+## 요청
+기존 캐릭터와 중복되지 않는 새로운 캐릭터를 생성해주세요.
+
+JSON 형식:
+[
+  {
+    "name": "한국식 이름",
+    "role": "protagonist",
+    "age": "25",
+    "gender": "남성/여성",
+    "occupation": "직업",
+    "personality": "성격 상세 설명 (3-4문장)",
+    "background": "배경 스토리 (3-4문장)",
+    "motivation": "동기",
+    "goal": "목표",
+    "appearance": "외모 상세 설명 (2-3문장)",
+    "strengths": ["강점1", "강점2"],
+    "weaknesses": ["약점1", "약점2"]
+  }
+]
+
+역할 분배: protagonist 1명, antagonist 1명, deuteragonist 1명, supporting 1명`;
+
+      const result = await generateJSON<Array<{
+        name: string;
+        role: Character['role'];
+        age: string;
+        gender: string;
+        occupation?: string;
+        personality: string;
+        background: string;
+        motivation: string;
+        goal: string;
+        appearance?: string;
+        strengths?: string[];
+        weaknesses?: string[];
+      }>>(settings.geminiApiKey, prompt, { temperature: 0.8 });
+
+      for (const char of result) {
+        await createCharacter(projectId, {
+          name: char.name,
+          role: char.role,
+          age: char.age,
+          gender: char.gender,
+          occupation: char.occupation,
+          personality: char.personality,
+          background: char.background,
+          motivation: char.motivation,
+          goal: char.goal,
+          appearance: char.appearance,
+          strengths: char.strengths || [],
+          weaknesses: char.weaknesses || [],
+          relationships: [],
+          emotionalState: [],
+          speechPattern: {
+            formalityLevel: 3,
+            speechSpeed: 'normal',
+            vocabularyLevel: 'average',
+            tone: '',
+          },
+          arc: {
+            type: 'positive',
+            startingState: '',
+            endingState: '',
+            keyMoments: [],
+          },
+        });
+      }
+
+      await fetchCharacters(projectId);
+    } catch (error) {
+      console.error('캐릭터 생성 실패:', error);
+      alert('캐릭터 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -134,15 +237,24 @@ export default function CharactersPage() {
           <p className="text-muted-foreground">소설에 등장하는 캐릭터를 관리하세요</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="default"
+            className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+            onClick={handleAutoGenerateCharacters}
+            disabled={isGenerating || !settings?.geminiApiKey}
+          >
+            {isGenerating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            AI 캐릭터 생성
+          </Button>
           <Button variant="outline" onClick={() => router.push(`/project/${projectId}/characters/relationships`)}>
             <Network className="h-4 w-4 mr-2" />
             관계도
           </Button>
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button variant="outline" className="gap-2">
                 <Plus className="h-4 w-4" />
-                캐릭터 추가
+                수동 추가
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">

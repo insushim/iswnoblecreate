@@ -12,6 +12,9 @@ import {
   Target,
   Users,
   Lightbulb,
+  Rocket,
+  CheckCircle,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +34,12 @@ import { Slider } from '@/components/ui/slider';
 import { AIThinking } from '@/components/common';
 import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useWorldStore } from '@/stores/worldStore';
+import { useCharacterStore } from '@/stores/characterStore';
+import { usePlotStore } from '@/stores/plotStore';
+import { useChapterStore } from '@/stores/chapterStore';
 import { generateJSON, generateText } from '@/lib/gemini';
+import { WorldSetting, Character, PlotPoint } from '@/types';
 
 const genres = [
   '로맨스', '판타지', '무협', '현대', '역사', '미스터리', '스릴러',
@@ -65,6 +73,10 @@ export default function PlanningPage() {
   const projectId = params.id as string;
   const { currentProject, updateProject } = useProjectStore();
   const { settings } = useSettingsStore();
+  const { createWorldSetting } = useWorldStore();
+  const { createCharacter } = useCharacterStore();
+  const { fetchPlotStructure, addPlotPoint } = usePlotStore();
+  const { createChapter } = useChapterStore();
 
   const [title, setTitle] = useState('');
   const [concept, setConcept] = useState('');
@@ -86,6 +98,12 @@ export default function PlanningPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
+  const [autoGenerateProgress, setAutoGenerateProgress] = useState<{
+    step: string;
+    current: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
     if (currentProject) {
@@ -253,18 +271,343 @@ export default function PlanningPage() {
     }
   };
 
+  // AI 전체 자동 생성 (원클릭으로 모든 것 생성)
+  const handleAutoGenerateAll = async () => {
+    if (!settings?.geminiApiKey || !concept) {
+      alert('API 키와 컨셉을 먼저 입력해주세요.');
+      return;
+    }
+
+    setIsAutoGenerating(true);
+    const totalSteps = 7;
+
+    try {
+      // 1단계: 로그라인 생성
+      setAutoGenerateProgress({ step: '로그라인 생성 중...', current: 1, total: totalSteps });
+      const loglinePrompt = `당신은 출판 전문 에디터입니다.
+다음 소설 컨셉을 바탕으로 매력적인 로그라인(한 문장 요약)을 작성해주세요.
+
+컨셉: ${concept}
+장르: ${selectedGenres.join(', ') || '판타지, 액션'}
+
+로그라인은 주인공, 갈등, 위기를 한 문장에 담아야 합니다.
+로그라인만 출력하세요.`;
+      const newLogline = await generateText(settings.geminiApiKey, loglinePrompt, { temperature: 0.7 });
+      setLogline(newLogline.trim());
+
+      // 2단계: 시놉시스 생성
+      setAutoGenerateProgress({ step: '시놉시스 생성 중...', current: 2, total: totalSteps });
+      const synopsisPrompt = `당신은 출판 전문 에디터입니다.
+다음 정보를 바탕으로 500자 내외의 시놉시스를 작성해주세요.
+
+컨셉: ${concept}
+로그라인: ${newLogline}
+장르: ${selectedGenres.join(', ') || '판타지, 액션'}
+
+시놉시스만 출력하세요.`;
+      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, { temperature: 0.7 });
+      setSynopsis(newSynopsis.trim());
+
+      // 3단계: 상세 시놉시스 생성
+      setAutoGenerateProgress({ step: '상세 시놉시스 생성 중...', current: 3, total: totalSteps });
+      const detailedPrompt = `다음 시놉시스를 1500자 내외의 상세 시놉시스로 확장해주세요.
+기승전결 구조로 주요 플롯 포인트를 포함하세요.
+
+시놉시스: ${newSynopsis}
+
+상세 시놉시스만 출력하세요.`;
+      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7 });
+      setDetailedSynopsis(newDetailed.trim());
+
+      // 기획 저장
+      await updateProject(projectId, {
+        title: title || '새 소설',
+        concept,
+        logline: newLogline.trim(),
+        synopsis: newSynopsis.trim(),
+        detailedSynopsis: newDetailed.trim(),
+        genre: selectedGenres.length > 0 ? selectedGenres : ['판타지', '액션'],
+        settings: {
+          ...currentProject?.settings,
+          perspective: perspective as 'first' | 'third-limited' | 'omniscient' | 'second',
+          writingStyle: writingStyle as 'calm' | 'elaborate' | 'concise' | 'lyrical' | 'tense' | 'humorous' | 'custom',
+          dialogueRatio,
+          descriptionDetail,
+          targetChapterLength,
+        },
+      });
+
+      // 4단계: 세계관 생성
+      setAutoGenerateProgress({ step: '세계관 생성 중...', current: 4, total: totalSteps });
+      const worldPrompt = `다음 소설 정보를 바탕으로 세계관 설정 5개를 JSON 배열로 생성해주세요.
+
+제목: ${title}
+컨셉: ${concept}
+시놉시스: ${newSynopsis}
+장르: ${selectedGenres.join(', ')}
+
+JSON 형식:
+[
+  {"category": "magic", "title": "마법 체계", "description": "설명...", "importance": "core"},
+  ...
+]
+
+카테고리: time, space, society, culture, economy, politics, religion, technology, magic, nature, history, language, custom
+중요도: core, major, minor`;
+
+      const worldResult = await generateJSON<Array<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>>(
+        settings.geminiApiKey, worldPrompt, { temperature: 0.7 }
+      );
+
+      for (const world of worldResult) {
+        await createWorldSetting(projectId, world);
+      }
+
+      // 5단계: 캐릭터 생성
+      setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 5, total: totalSteps });
+      const characterPrompt = `다음 소설 정보를 바탕으로 주요 캐릭터 4명을 JSON 배열로 생성해주세요.
+
+제목: ${title}
+컨셉: ${concept}
+시놉시스: ${newSynopsis}
+
+JSON 형식:
+[
+  {
+    "name": "이름",
+    "role": "protagonist",
+    "age": "20",
+    "gender": "남성",
+    "occupation": "직업",
+    "personality": "성격 설명 (2-3문장)",
+    "background": "배경 스토리 (2-3문장)",
+    "motivation": "동기",
+    "goal": "목표",
+    "appearance": "외모 설명"
+  },
+  ...
+]
+
+역할(role): protagonist(주인공 1명), antagonist(악역 1명), deuteragonist(조연주인공 1명), supporting(조연 1명)`;
+
+      const characterResult = await generateJSON<Array<{
+        name: string;
+        role: Character['role'];
+        age: string;
+        gender: string;
+        occupation?: string;
+        personality: string;
+        background: string;
+        motivation: string;
+        goal: string;
+        appearance?: string;
+      }>>(settings.geminiApiKey, characterPrompt, { temperature: 0.8 });
+
+      for (const char of characterResult) {
+        await createCharacter(projectId, {
+          name: char.name,
+          role: char.role,
+          age: char.age,
+          gender: char.gender,
+          occupation: char.occupation,
+          personality: char.personality,
+          background: char.background,
+          motivation: char.motivation,
+          goal: char.goal,
+          appearance: char.appearance,
+          strengths: [],
+          weaknesses: [],
+          relationships: [],
+          emotionalState: [],
+          speechPattern: {
+            formalityLevel: 3,
+            speechSpeed: 'normal',
+            vocabularyLevel: 'average',
+            tone: '',
+          },
+          arc: {
+            type: 'positive',
+            startingState: '',
+            endingState: '',
+            keyMoments: [],
+          },
+        });
+      }
+
+      // 6단계: 플롯 포인트 생성
+      setAutoGenerateProgress({ step: '플롯 구조 생성 중...', current: 6, total: totalSteps });
+      await fetchPlotStructure(projectId);
+
+      const plotPrompt = `다음 소설 정보를 바탕으로 주요 플롯 포인트 7개를 JSON 배열로 생성해주세요.
+
+제목: ${title}
+시놉시스: ${newSynopsis}
+상세 시놉시스: ${newDetailed}
+
+JSON 형식:
+[
+  {"title": "제목", "description": "설명", "type": "opening", "order": 0},
+  ...
+]
+
+타입: opening, inciting-incident, first-plot-point, midpoint, second-plot-point, climax, resolution`;
+
+      const plotResult = await generateJSON<Array<{
+        title: string;
+        description: string;
+        type: PlotPoint['type'];
+        order: number;
+      }>>(settings.geminiApiKey, plotPrompt, { temperature: 0.7 });
+
+      for (const plot of plotResult) {
+        await addPlotPoint({
+          ...plot,
+          stage: '',
+          completed: false,
+        });
+      }
+
+      // 7단계: 챕터 구조 생성
+      setAutoGenerateProgress({ step: '챕터 구조 생성 중...', current: 7, total: totalSteps });
+      const chapterPrompt = `다음 소설 정보를 바탕으로 10개 챕터 구조를 JSON 배열로 생성해주세요.
+
+시놉시스: ${newSynopsis}
+상세 시놉시스: ${newDetailed}
+
+JSON 형식:
+[
+  {"number": 1, "title": "제목", "purpose": "이 챕터의 목적", "keyEvents": ["주요 사건1", "주요 사건2"]},
+  ...
+]`;
+
+      const chapterResult = await generateJSON<Array<{
+        number: number;
+        title: string;
+        purpose: string;
+        keyEvents: string[];
+      }>>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7 });
+
+      for (const chapter of chapterResult) {
+        await createChapter(projectId, {
+          number: chapter.number,
+          title: chapter.title,
+          purpose: chapter.purpose,
+          keyEvents: chapter.keyEvents,
+          status: 'outline',
+        });
+      }
+
+      setAutoGenerateProgress({ step: '완료!', current: totalSteps, total: totalSteps });
+
+      // 완료 알림
+      setTimeout(() => {
+        setAutoGenerateProgress(null);
+        alert('AI 자동 생성이 완료되었습니다! 각 메뉴에서 결과를 확인하고 수정할 수 있습니다.');
+      }, 1000);
+
+    } catch (error) {
+      console.error('자동 생성 실패:', error);
+      alert('자동 생성 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsAutoGenerating(false);
+    }
+  };
+
   return (
     <div className="container mx-auto py-8 px-4 space-y-6">
+      {/* AI 자동 생성 진행 상태 */}
+      {isAutoGenerating && autoGenerateProgress && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        >
+          <Card className="w-[400px]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                AI 자동 생성 중
+              </CardTitle>
+              <CardDescription>
+                모든 설정을 자동으로 생성하고 있습니다. 잠시만 기다려주세요.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>{autoGenerateProgress.step}</span>
+                  <span>{autoGenerateProgress.current}/{autoGenerateProgress.total}</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(autoGenerateProgress.current / autoGenerateProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {[1, 2, 3, 4, 5, 6, 7].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-1 rounded-full ${
+                      step <= autoGenerateProgress.current ? 'bg-primary' : 'bg-muted'
+                    }`}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">기획</h1>
           <p className="text-muted-foreground">소설의 기본 설정을 정의하세요</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="gap-2">
-          <Save className="h-4 w-4" />
-          {isSaving ? '저장 중...' : '저장'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleAutoGenerateAll}
+            disabled={isAutoGenerating || !concept}
+            variant="default"
+            className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+          >
+            <Rocket className="h-4 w-4" />
+            AI 전체 자동 생성
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving} variant="outline" className="gap-2">
+            <Save className="h-4 w-4" />
+            {isSaving ? '저장 중...' : '저장'}
+          </Button>
+        </div>
       </div>
+
+      {/* 자동 생성 안내 카드 */}
+      {!isAutoGenerating && (
+        <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-full bg-primary/10">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold">AI가 모든 것을 자동으로 생성합니다</h3>
+                <p className="text-sm text-muted-foreground">
+                  컨셉만 입력하면 로그라인, 시놉시스, 세계관, 캐릭터, 플롯, 챕터까지 모두 AI가 생성합니다.
+                  생성 후 각 메뉴에서 내용을 확인하고 수정하세요.
+                </p>
+              </div>
+              {concept && (
+                <Button onClick={handleAutoGenerateAll} disabled={isAutoGenerating} className="gap-2">
+                  <Wand2 className="h-4 w-4" />
+                  지금 생성
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="basic" className="space-y-6">
         <TabsList>
