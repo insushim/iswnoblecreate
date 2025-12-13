@@ -203,7 +203,7 @@ ${content.slice(-500) || '(이 챕터가 시작입니다)'}
 ## 작성 규칙
 1. 한국어로 작성
 2. 소설 문체로 작성 (3인칭 제한 시점 권장)
-3. ${currentProject.settings?.targetChapterLength || 3000}자 내외로 작성
+3. ${currentProject.settings?.targetChapterLength || 10000}자 내외로 작성
 4. 대화문은 큰따옴표 사용
 5. 캐릭터의 성격과 말투가 드러나도록
 6. 독자의 몰입을 위해 생생한 묘사 포함
@@ -227,9 +227,10 @@ ${content.slice(-500) || '(이 챕터가 시작입니다)'}
 
 이 챕터의 내용을 완성해주세요. 소설 본문만 출력하세요.`;
 
+      const targetLength = currentProject.settings?.targetChapterLength || 10000;
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
-        maxTokens: 8000,
+        maxTokens: Math.max(16000, targetLength * 2), // 목표 글자수의 2배 토큰 확보
       });
 
       const newContent = content ? content + '\n\n' + response.trim() : response.trim();

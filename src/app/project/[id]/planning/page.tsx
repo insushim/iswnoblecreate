@@ -69,11 +69,11 @@ const writingStyles = [
 ];
 
 const novelLengths = [
-  { value: 50000, label: '단편 (5만자)', chapters: 5, characters: 5 },
-  { value: 100000, label: '중편 (10만자)', chapters: 10, characters: 8 },
-  { value: 200000, label: '장편 (20만자)', chapters: 20, characters: 12 },
-  { value: 500000, label: '대작 (50만자)', chapters: 50, characters: 15 },
-  { value: 1000000, label: '시리즈급 (100만자)', chapters: 100, characters: 20 },
+  { value: 50000, label: '단편 (5만자)', chapters: 5, characters: 5, chapterLength: 10000 },
+  { value: 100000, label: '중편 (10만자)', chapters: 10, characters: 8, chapterLength: 10000 },
+  { value: 200000, label: '장편 (20만자)', chapters: 20, characters: 12, chapterLength: 10000 },
+  { value: 500000, label: '대작 (50만자)', chapters: 50, characters: 15, chapterLength: 10000 },
+  { value: 1000000, label: '시리즈급 (100만자)', chapters: 100, characters: 20, chapterLength: 10000 },
 ];
 
 export default function PlanningPage() {
@@ -328,7 +328,10 @@ export default function PlanningPage() {
       const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7 });
       setDetailedSynopsis(newDetailed.trim());
 
-      // 기획 저장
+      // 기획 저장 - 선택된 분량에 맞춰 설정
+      const selectedLength = novelLengths.find(l => l.value === targetNovelLength) || novelLengths[2];
+      const calculatedChapterLength = selectedLength.chapterLength; // 10,000자/챕터
+
       await updateProject(projectId, {
         title: title || '새 소설',
         concept,
@@ -342,7 +345,8 @@ export default function PlanningPage() {
           tense: currentProject?.settings?.tense || 'past',
           dialogueRatio,
           descriptionDetail,
-          targetChapterLength,
+          targetChapterLength: calculatedChapterLength,
+          targetTotalLength: targetNovelLength,
           pacingPreference: currentProject?.settings?.pacingPreference || 'moderate',
           emotionIntensity: currentProject?.settings?.emotionIntensity || 5,
           language: currentProject?.settings?.language || 'ko',
@@ -378,7 +382,6 @@ JSON 형식:
 
       // 5단계: 캐릭터 생성
       setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 5, total: totalSteps });
-      const selectedLength = novelLengths.find(l => l.value === targetNovelLength) || novelLengths[2];
       const numCharacters = selectedLength.characters;
 
       const characterPrompt = `다음 소설 정보를 바탕으로 주요 캐릭터 ${numCharacters}명을 JSON 배열로 생성해주세요.
