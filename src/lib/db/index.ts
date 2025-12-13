@@ -66,8 +66,15 @@ export const db = new NovelForgeDB();
 
 // 기본 앱 설정 초기화
 export async function initializeAppSettings(): Promise<AppSettings> {
+  const envApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
   const existingSettings = await db.appSettings.get('default');
+
   if (existingSettings) {
+    // 환경 변수에 API 키가 있으면 항상 사용 (서버 설정 우선)
+    if (envApiKey) {
+      existingSettings.geminiApiKey = envApiKey;
+      await db.appSettings.update('default', { geminiApiKey: envApiKey });
+    }
     return existingSettings;
   }
 
@@ -80,7 +87,7 @@ export async function initializeAppSettings(): Promise<AppSettings> {
     autoSaveInterval: 30,
     soundEffects: false,
     notifications: true,
-    geminiApiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
+    geminiApiKey: envApiKey,
   };
 
   await db.appSettings.add(defaultSettings);
