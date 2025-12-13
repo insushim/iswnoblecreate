@@ -1,0 +1,604 @@
+// 프로젝트 타입 정의
+export interface Project {
+  id: string;
+  title: string;
+  subtitle?: string;
+  concept: string;
+  logline: string;
+  synopsis: string;
+  detailedSynopsis?: string;
+  genre: string[];
+  subGenre?: string[];
+  targetAudience: string;
+  ageRating: 'all' | 'teen' | 'adult';
+  keywords: string[];
+  similarWorks?: string[];
+  status: 'idea' | 'planning' | 'writing' | 'editing' | 'completed';
+  seriesId?: string;
+  seriesOrder?: number;
+  createdAt: Date;
+  updatedAt: Date;
+  settings: ProjectSettings;
+  stats: ProjectStats;
+  goals: WritingGoals;
+}
+
+// 프로젝트 설정
+export interface ProjectSettings {
+  writingStyle: 'calm' | 'elaborate' | 'concise' | 'lyrical' | 'tense' | 'humorous' | 'custom';
+  customStylePrompt?: string;
+  referenceStyle?: string;
+  perspective: 'first' | 'third-limited' | 'omniscient' | 'second';
+  perspectiveCharacterId?: string;
+  tense: 'past' | 'present';
+  dialogueRatio: number;
+  descriptionDetail: number;
+  pacingPreference: 'slow' | 'moderate' | 'fast';
+  emotionIntensity: number;
+  targetChapterLength: number;
+  targetTotalLength?: number;
+  language: 'ko' | 'en';
+  autoSaveInterval: number;
+}
+
+// 글쓰기 목표
+export interface WritingGoals {
+  dailyWordCount: number;
+  weeklyWordCount?: number;
+  deadline?: Date;
+  deadlineType?: 'contest' | 'personal' | 'publication';
+  contestName?: string;
+  milestones: Milestone[];
+}
+
+// 마일스톤
+export interface Milestone {
+  id: string;
+  title: string;
+  targetDate: Date;
+  targetWordCount?: number;
+  targetChapter?: number;
+  completed: boolean;
+  completedAt?: Date;
+}
+
+// 프로젝트 통계
+export interface ProjectStats {
+  totalWords: number;
+  totalCharacters: number;
+  chaptersCompleted: number;
+  chaptersTotal: number;
+  averageWordsPerChapter: number;
+  writingDays: number;
+  totalWritingTime: number;
+  averageWordsPerDay: number;
+  lastWritingSession?: Date;
+  longestStreak: number;
+  currentStreak: number;
+}
+
+// 세계관
+export interface WorldSetting {
+  id: string;
+  projectId: string;
+  category: 'time' | 'space' | 'society' | 'culture' | 'economy' | 'politics' | 'religion' | 'technology' | 'magic' | 'nature' | 'history' | 'language' | 'custom';
+  title: string;
+  description: string;
+  details: Record<string, string>;
+  importance: 'core' | 'major' | 'minor';
+  relatedSettings?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 용어 사전
+export interface DictionaryEntry {
+  id: string;
+  projectId: string;
+  term: string;
+  definition: string;
+  category: string;
+  pronunciation?: string;
+  aliases?: string[];
+  relatedTerms?: string[];
+  firstAppearance?: string;
+  createdAt: Date;
+}
+
+// 장소
+export interface Location {
+  id: string;
+  projectId: string;
+  name: string;
+  type: 'country' | 'city' | 'building' | 'room' | 'natural' | 'fictional' | 'other';
+  description: string;
+  atmosphere: string;
+  significance: string;
+  parentLocationId?: string;
+  connectedLocations?: string[];
+  coordinates?: { x: number; y: number };
+  imageUrl?: string;
+  createdAt: Date;
+}
+
+// 캐릭터
+export interface Character {
+  id: string;
+  projectId: string;
+  name: string;
+  fullName?: string;
+  nickname?: string[];
+  role: 'protagonist' | 'antagonist' | 'deuteragonist' | 'supporting' | 'minor' | 'mentioned';
+  age: number | string;
+  birthday?: string;
+  gender: string;
+  occupation?: string;
+  appearance: string;
+  physicalTraits?: string[];
+  personality: string;
+  mbti?: string;
+  enneagram?: string;
+  temperament?: string;
+  background: string;
+  familyBackground?: string;
+  motivation: string;
+  goal: string;
+  internalGoal?: string;
+  fear?: string;
+  secret?: string;
+  lie?: string;
+  strengths: string[];
+  weaknesses: string[];
+  skills?: string[];
+  habits?: string[];
+  quirks?: string[];
+  speechPattern: SpeechPattern;
+  arc: CharacterArc;
+  relationships: Relationship[];
+  emotionalState: EmotionalState[];
+  firstAppearance?: string;
+  imageUrl?: string;
+  color?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 말투 패턴
+export interface SpeechPattern {
+  formalityLevel: number;
+  speechSpeed: 'slow' | 'normal' | 'fast';
+  vocabularyLevel: 'simple' | 'average' | 'complex';
+  tone: string;
+  catchphrase?: string[];
+  dialect?: string;
+  speechHabits?: string[];
+  avoidWords?: string[];
+  sampleDialogues?: string[];
+}
+
+// 캐릭터 아크
+export interface CharacterArc {
+  type: 'positive' | 'negative' | 'flat' | 'corruption' | 'disillusionment';
+  startingState: string;
+  endingState: string;
+  keyMoments: ArcMoment[];
+  transformationTrigger?: string;
+}
+
+// 아크 주요 순간
+export interface ArcMoment {
+  id: string;
+  sceneId?: string;
+  description: string;
+  stage: 'beginning' | 'catalyst' | 'struggle' | 'climax' | 'resolution';
+  emotionalImpact: string;
+}
+
+// 감정 상태
+export interface EmotionalState {
+  sceneId: string;
+  primaryEmotion: string;
+  secondaryEmotion?: string;
+  intensity: number;
+  trigger?: string;
+  note?: string;
+}
+
+// 관계
+export interface Relationship {
+  targetId: string;
+  type: 'family' | 'friend' | 'rival' | 'love' | 'enemy' | 'colleague' | 'mentor' | 'student' | 'business' | 'other';
+  subtype?: string;
+  description: string;
+  dynamicDescription?: string;
+  startingRelation: string;
+  currentRelation: string;
+  tension?: number;
+  evolution?: RelationshipEvolution[];
+}
+
+// 관계 변화 추적
+export interface RelationshipEvolution {
+  sceneId: string;
+  description: string;
+  relationBefore: string;
+  relationAfter: string;
+}
+
+// 플롯 구조
+export interface PlotStructure {
+  id: string;
+  projectId: string;
+  template: 'three-act' | 'hero-journey' | 'seven-point' | 'kishotenketsu' | 'freytag' | 'save-the-cat' | 'mystery' | 'romance' | 'custom';
+  customTemplate?: CustomTemplate;
+  stages?: PlotStage[];
+  plotPoints: PlotPoint[];
+  subplots: Subplot[];
+  updatedAt: Date;
+}
+
+// 플롯 포인트
+export interface PlotPoint {
+  id: string;
+  title: string;
+  description: string;
+  type: 'opening' | 'inciting-incident' | 'first-plot-point' | 'midpoint' | 'second-plot-point' | 'climax' | 'resolution' | 'custom';
+  stage: string;
+  chapterId?: string;
+  sceneId?: string;
+  order: number;
+  completed: boolean;
+}
+
+// 사용자 정의 템플릿
+export interface CustomTemplate {
+  name: string;
+  description: string;
+  stages: { name: string; description: string; percentage: number }[];
+}
+
+// 플롯 단계
+export interface PlotStage {
+  id: string;
+  name: string;
+  description: string;
+  purpose: string;
+  targetPercentage: number;
+  chapters: string[];
+  order: number;
+  status: 'planned' | 'in-progress' | 'completed';
+}
+
+// 서브플롯
+export interface Subplot {
+  id: string;
+  title: string;
+  description: string;
+  type: 'romance' | 'mystery' | 'character-growth' | 'theme' | 'comic-relief' | 'other';
+  mainCharacters: string[];
+  connectionToMain: string;
+  startChapter?: string;
+  endChapter?: string;
+  status: 'active' | 'resolved' | 'abandoned';
+  beats: SubplotBeat[];
+}
+
+// 서브플롯 비트
+export interface SubplotBeat {
+  id: string;
+  sceneId?: string;
+  description: string;
+  order: number;
+}
+
+// 챕터
+export interface Chapter {
+  id: string;
+  projectId: string;
+  number: number;
+  title: string;
+  subtitle?: string;
+  purpose: string;
+  emotionalGoal?: string;
+  keyEvents: string[];
+  povCharacterId?: string;
+  location?: string;
+  timeframe?: string;
+  scenes: Scene[];
+  status: 'outline' | 'draft' | 'revision' | 'polished' | 'approved';
+  wordCount: number;
+  targetWordCount?: number;
+  notes?: string;
+  plotStageId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 씬
+export interface Scene {
+  id: string;
+  chapterId: string;
+  order: number;
+  title: string;
+  type: 'action' | 'dialogue' | 'reflection' | 'exposition' | 'transition' | 'climax';
+  summary: string;
+  goal: string;
+  conflict?: string;
+  outcome?: string;
+  content: string;
+  pov?: string;
+  povType?: 'first' | 'third-limited' | 'omniscient';
+  location?: string;
+  timeOfDay?: string;
+  weather?: string;
+  mood?: string;
+  participants: string[];
+  mentionedCharacters?: string[];
+  status: 'outline' | 'draft' | 'revision' | 'polished' | 'approved';
+  wordCount: number;
+  versions: SceneVersion[];
+  foreshadowings?: string[];
+  resolvedForeshadowings?: string[];
+  conflicts?: string[];
+  notes?: string;
+  aiGenerationParams?: AIGenerationParams;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// AI 생성 파라미터
+export interface AIGenerationParams {
+  style: string;
+  perspective: string;
+  dialogueRatio: number;
+  descriptionDetail: number;
+  pacing: string;
+  emotionIntensity: number;
+  additionalInstructions?: string;
+}
+
+// 씬 버전
+export interface SceneVersion {
+  id: string;
+  content: string;
+  wordCount: number;
+  createdAt: Date;
+  note?: string;
+  type: 'auto' | 'manual' | 'ai-generated' | 'branch';
+  branchName?: string;
+}
+
+// 복선
+export interface Foreshadowing {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  type: 'hint' | 'symbol' | 'prophecy' | 'setup' | 'red-herring';
+  subtlety: number;
+  plantedIn: string;
+  plantedMethod: string;
+  resolvedIn?: string;
+  resolutionMethod?: string;
+  relatedCharacters?: string[];
+  relatedPlot?: string;
+  status: 'planted' | 'reinforced' | 'resolved' | 'abandoned';
+  priority: 'critical' | 'major' | 'minor';
+  notes?: string;
+  createdAt: Date;
+}
+
+// 갈등
+export interface Conflict {
+  id: string;
+  projectId: string;
+  type: 'internal' | 'interpersonal' | 'societal' | 'environmental' | 'supernatural' | 'technological';
+  title: string;
+  description: string;
+  stakes: string;
+  involvedCharacters: string[];
+  primaryCharacter?: string;
+  introducedIn: string;
+  escalations?: ConflictEscalation[];
+  climaxIn?: string;
+  resolvedIn?: string;
+  resolution?: string;
+  status: 'brewing' | 'active' | 'escalating' | 'climax' | 'resolved' | 'abandoned';
+  intensity: number;
+  createdAt: Date;
+}
+
+// 갈등 에스컬레이션
+export interface ConflictEscalation {
+  sceneId: string;
+  description: string;
+  intensityChange: number;
+}
+
+// 분석 결과
+export interface Analysis {
+  id: string;
+  targetType: 'scene' | 'chapter' | 'project';
+  targetId: string;
+  qualityScore: QualityScore;
+  tensionAnalysis: TensionAnalysis;
+  emotionAnalysis: EmotionAnalysis;
+  pacingAnalysis: PacingAnalysis;
+  styleAnalysis: StyleAnalysis;
+  suggestions: Suggestion[];
+  consistencyIssues: ConsistencyIssue[];
+  createdAt: Date;
+}
+
+// 품질 점수
+export interface QualityScore {
+  overall: number;
+  readability: number;
+  grammar: number;
+  style: number;
+  engagement: number;
+  originality: number;
+  details: string[];
+}
+
+// 긴장감 분석
+export interface TensionAnalysis {
+  averageLevel: number;
+  peakMoments: { position: number; level: number; description: string }[];
+  lowPoints: { position: number; level: number; suggestion: string }[];
+  curve: { position: number; level: number }[];
+}
+
+// 감정 분석
+export interface EmotionAnalysis {
+  dominantEmotions: { emotion: string; percentage: number }[];
+  emotionFlow: { position: number; emotion: string; intensity: number }[];
+  toneConsistency: number;
+  emotionalImpact: string;
+}
+
+// 페이싱 분석
+export interface PacingAnalysis {
+  overallPacing: 'too-slow' | 'slow' | 'balanced' | 'fast' | 'too-fast';
+  variationScore: number;
+  slowSections: { start: number; end: number; suggestion: string }[];
+  fastSections: { start: number; end: number; suggestion: string }[];
+}
+
+// 스타일 분석
+export interface StyleAnalysis {
+  showVsTell: { show: number; tell: number };
+  activeVsPassive: { active: number; passive: number };
+  dialogueRatio: number;
+  averageSentenceLength: number;
+  vocabularyRichness: number;
+  repetitiveWords: { word: string; count: number }[];
+  cliches: { phrase: string; suggestion: string }[];
+}
+
+// 제안
+export interface Suggestion {
+  id: string;
+  type: 'style' | 'description' | 'dialogue' | 'flow' | 'tension' | 'character' | 'world' | 'grammar' | 'other';
+  priority: 'high' | 'medium' | 'low';
+  location?: { start: number; end: number };
+  original?: string;
+  suggestion: string;
+  reason: string;
+  applied: boolean;
+}
+
+// 일관성 문제
+export interface ConsistencyIssue {
+  id: string;
+  type: 'character-personality' | 'character-speech' | 'character-knowledge' | 'world-rules' | 'timeline' | 'foreshadowing' | 'location' | 'relationship' | 'other';
+  description: string;
+  severity: 'critical' | 'major' | 'minor';
+  location?: { start: number; end: number };
+  reference?: string;
+  suggestion?: string;
+  resolved: boolean;
+}
+
+// 표현 라이브러리
+export interface Expression {
+  id: string;
+  projectId?: string;
+  category: 'emotion' | 'sense' | 'metaphor' | 'action' | 'description' | 'dialogue-tag' | 'other';
+  subcategory?: string;
+  content: string;
+  context?: string;
+  tags: string[];
+  isFavorite: boolean;
+  isCustom: boolean;
+  createdAt: Date;
+}
+
+// 시리즈
+export interface Series {
+  id: string;
+  title: string;
+  description: string;
+  genre: string[];
+  targetBooks: number;
+  status: 'ongoing' | 'completed' | 'hiatus';
+  projects: string[];
+  sharedWorld?: string;
+  sharedCharacters?: string[];
+  timeline: SeriesTimeline;
+  bible: SeriesBible;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 시리즈 타임라인
+export interface SeriesTimeline {
+  events: SeriesEvent[];
+}
+
+// 시리즈 이벤트
+export interface SeriesEvent {
+  id: string;
+  bookIndex: number;
+  description: string;
+  date?: string;
+  order: number;
+}
+
+// 시리즈 성경
+export interface SeriesBible {
+  overview: string;
+  worldRules: string[];
+  recurringElements: string[];
+  characterNotes: Record<string, string>;
+  plotThreads: string[];
+  toneGuidelines: string;
+}
+
+// 독자 페르소나
+export interface ReaderPersona {
+  id: string;
+  name: string;
+  ageRange: string;
+  readingExperience: 'casual' | 'regular' | 'avid' | 'critic';
+  preferredGenres: string[];
+  petPeeves: string[];
+  preferences: string[];
+}
+
+// 리서치 노트
+export interface ResearchNote {
+  id: string;
+  projectId: string;
+  title: string;
+  category: string;
+  content: string;
+  source?: string;
+  url?: string;
+  tags: string[];
+  createdAt: Date;
+}
+
+// 글쓰기 세션
+export interface WritingSession {
+  id: string;
+  projectId: string;
+  startTime: Date;
+  endTime?: Date;
+  wordsWritten: number;
+  chaptersWorked: string[];
+  notes?: string;
+}
+
+// 앱 설정
+export interface AppSettings {
+  id: string;
+  theme: 'dark' | 'light' | 'sepia';
+  fontSize: number;
+  fontFamily: string;
+  autoSave: boolean;
+  autoSaveInterval: number;
+  soundEffects: boolean;
+  notifications: boolean;
+  geminiApiKey?: string;
+}

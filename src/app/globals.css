@@ -2,26 +2,232 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+@layer base {
+  :root {
+    --background: 40 20% 95%;
+    --foreground: 240 10% 10%;
+    --card: 40 30% 98%;
+    --card-foreground: 240 10% 10%;
+    --popover: 40 30% 98%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 45 70% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 50% 90%;
+    --secondary-foreground: 270 100% 25%;
+    --muted: 40 20% 90%;
+    --muted-foreground: 240 5% 45%;
+    --accent: 180 50% 90%;
+    --accent-foreground: 180 100% 20%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 10% 85%;
+    --input: 40 10% 85%;
+    --ring: 45 70% 40%;
+    --chart-1: 45 70% 50%;
+    --chart-2: 270 60% 50%;
+    --chart-3: 180 60% 40%;
+    --chart-4: 0 70% 55%;
+    --chart-5: 120 50% 45%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 10% 8%;
+    --foreground: 0 0% 95%;
+    --card: 240 10% 12%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 10% 12%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 45 65% 50%;
+    --primary-foreground: 240 10% 8%;
+    --secondary: 270 100% 25%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 5% 18%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 180 100% 27%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 20%;
+    --input: 240 5% 20%;
+    --ring: 45 65% 50%;
+    --chart-1: 45 70% 55%;
+    --chart-2: 270 70% 55%;
+    --chart-3: 180 70% 45%;
+    --chart-4: 0 75% 60%;
+    --chart-5: 120 55% 50%;
+  }
+
+  .sepia {
+    --background: 35 35% 90%;
+    --foreground: 30 30% 20%;
+    --card: 35 40% 93%;
+    --card-foreground: 30 30% 20%;
+    --popover: 35 40% 93%;
+    --popover-foreground: 30 30% 20%;
+    --primary: 30 60% 40%;
+    --primary-foreground: 35 35% 95%;
+    --secondary: 30 30% 80%;
+    --secondary-foreground: 30 30% 20%;
+    --muted: 35 25% 85%;
+    --muted-foreground: 30 20% 40%;
+    --accent: 30 40% 85%;
+    --accent-foreground: 30 30% 20%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 35 20% 80%;
+    --input: 35 20% 80%;
+    --ring: 30 60% 40%;
+    --chart-1: 30 65% 50%;
+    --chart-2: 0 50% 50%;
+    --chart-3: 60 40% 45%;
+    --chart-4: 180 30% 40%;
+    --chart-5: 270 30% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* 감정 색상 변수 */
+:root {
+  --emotion-joy: 48 96% 53%;
+  --emotion-sadness: 215 85% 55%;
+  --emotion-anger: 0 85% 50%;
+  --emotion-fear: 270 70% 45%;
+  --emotion-surprise: 175 80% 50%;
+  --emotion-love: 340 82% 60%;
+  --emotion-tension: 15 90% 55%;
+  --emotion-calm: 165 45% 55%;
+}
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* 에디터 기본 스타일 */
+.novel-editor {
+  font-family: 'KoPub Batang', 'Noto Serif KR', Georgia, serif;
+  line-height: 1.8;
+}
+
+.novel-editor p {
+  margin-bottom: 1em;
+  text-indent: 1em;
+}
+
+.novel-editor p:first-child {
+  text-indent: 0;
+}
+
+/* 포커스 모드 스타일 */
+.focus-mode {
+  background: hsl(var(--background));
+}
+
+.focus-mode .novel-editor {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* 선택 영역 스타일 */
+::selection {
+  background: hsl(var(--primary) / 0.3);
+}
+
+/* 애니메이션 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 0.2s ease-out;
+}
+
+/* 타이핑 효과 */
+@keyframes typing {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.typing-effect span {
+  animation: typing 0.05s ease-in forwards;
+  opacity: 0;
+}
+
+/* 반짝임 효과 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
