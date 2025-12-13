@@ -177,55 +177,54 @@ export default function ChapterEditorPage() {
         .map(w => `- ${w.title}: ${w.description}`)
         .join('\n');
 
-      const prompt = `당신은 전문 소설 작가입니다. 다음 설정에 맞춰 이 챕터의 전체 내용을 작성해주세요.
+      const prompt = `당신은 한국의 베스트셀러 소설가입니다. 출판용 소설 원고를 작성합니다.
 
-## 작품 정보
-- 제목: ${currentProject.title}
-- 장르: ${currentProject.genre.join(', ')}
-- 컨셉: ${currentProject.concept}
-- 시놉시스: ${currentProject.synopsis}
+[작품 정보]
+제목: ${currentProject.title}
+장르: ${currentProject.genre.join(', ')}
+시놉시스: ${currentProject.synopsis}
 
-## 세계관
+[세계관]
 ${worldInfo || '없음'}
 
-## 등장인물
+[등장인물]
 ${characterInfo || '없음'}
 
-## 챕터 정보
-- 챕터 제목: ${currentChapter.title}
-- 챕터 번호: ${currentChapter.number}장
-- 이 챕터의 목적: ${currentChapter.purpose || '스토리 전개'}
-- 주요 사건: ${currentChapter.keyEvents?.join(', ') || '없음'}
+[현재 챕터]
+${currentChapter.number}장 - ${currentChapter.title}
+목적: ${currentChapter.purpose || '스토리 전개'}
+주요 사건: ${currentChapter.keyEvents?.join(', ') || '없음'}
 
-## 이전 내용
-${content.slice(-500) || '(이 챕터가 시작입니다)'}
+[이전 내용]
+${content.slice(-800) || '(첫 장면입니다)'}
 
-## 작성 규칙
-1. 한국어로 작성
-2. 소설 문체로 작성 (3인칭 제한 시점 권장)
-3. ${currentProject.settings?.targetChapterLength || 10000}자 내외로 작성
-4. 대화문은 큰따옴표 사용
-5. 캐릭터의 성격과 말투가 드러나도록
-6. 독자의 몰입을 위해 생생한 묘사 포함
-7. 챕터의 목적과 주요 사건을 반영
+[분량]
+${currentProject.settings?.targetChapterLength || 10000}자
 
-## 포맷팅 규칙 (매우 중요!)
-1. 각 문단의 첫 줄은 반드시 두 칸 들여쓰기로 시작 (공백 2개)
-2. 문단과 문단 사이는 빈 줄 하나로 구분
-3. 대화문은 새 줄에서 시작하고, 대화문 앞에도 두 칸 들여쓰기
-4. 장면 전환 시 빈 줄 두 개로 구분
-5. 절대로 ***, ---, === 같은 구분선을 사용하지 말 것
-6. 절대로 * 기호로 강조하지 말 것
-7. 한 문단은 3~5문장으로 구성
+[출판용 원고 형식 - 반드시 준수]
 
-예시:
-  햇살이 창문을 통해 쏟아져 들어왔다. 그녀는 천천히 눈을 떴다.
+1. 들여쓰기: 모든 문단 첫 줄은 전각 공백(　) 하나로 시작
+2. 문단 구분: 문단 사이에 빈 줄 하나
+3. 대화문: 새 줄에서 전각 공백 후 큰따옴표로 시작
+4. 지문: 대화 뒤 지문은 같은 줄에 쓰거나 새 문단으로
+5. 장면 전환: 빈 줄 두 개로 구분
+6. 금지: *, #, -, =, _ 등 특수문자로 구분선이나 강조 절대 금지
 
-  "일어났구나."
+[예시 원고]
+　창밖으로 붉은 노을이 번져가고 있었다. 하늘은 마치 누군가 물감을 흩뿌린 것처럼 붉고 푸른 빛이 뒤섞여 있었다. 그녀는 창가에 서서 멍하니 그 풍경을 바라보았다.
 
-  낯선 목소리에 그녀는 몸을 일으켰다. 눈앞에 서 있는 남자를 바라보며 경계심을 드러냈다.
+　"뭘 그렇게 보고 있어?"
 
-이 챕터의 내용을 완성해주세요. 소설 본문만 출력하세요.`;
+　뒤에서 들려온 목소리에 그녀는 고개를 돌렸다. 문 앞에 그가 서 있었다. 손에는 김이 모락모락 나는 머그컵 두 개가 들려 있었다.
+
+　"그냥, 노을이 예뻐서."
+
+　그녀는 미소를 지으며 대답했다. 그가 다가와 그녀 옆에 섰다. 두 사람은 나란히 서서 저물어가는 하늘을 바라보았다.
+
+
+　밤이 되자 거리에는 가로등이 하나둘 켜지기 시작했다. 낮의 소란스러움은 사라지고, 고요한 정적만이 감돌았다.
+
+위 예시처럼 출판 소설 형식으로 이 챕터를 작성하세요. 본문만 출력하세요.`;
 
       const targetLength = currentProject.settings?.targetChapterLength || 10000;
       const response = await generateText(settings.geminiApiKey, prompt, {
@@ -233,7 +232,49 @@ ${content.slice(-500) || '(이 챕터가 시작입니다)'}
         maxTokens: Math.max(16000, targetLength * 2), // 목표 글자수의 2배 토큰 확보
       });
 
-      const newContent = content ? content + '\n\n' + response.trim() : response.trim();
+      // 텍스트 후처리 - 출판 형식으로 정리
+      const formatNovelText = (text: string): string => {
+        let formatted = text.trim();
+
+        // 특수문자 구분선 제거 (*, -, =, #, _ 등)
+        formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
+        formatted = formatted.replace(/^\*{3,}.*$/gm, '');
+        formatted = formatted.replace(/^-{3,}.*$/gm, '');
+        formatted = formatted.replace(/^={3,}.*$/gm, '');
+
+        // **강조** 또는 *강조* 제거
+        formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
+
+        // 여러 개의 빈 줄을 두 개로 통일 (장면 전환)
+        formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+
+        // 각 문단에 들여쓰기 추가 (전각 공백)
+        const lines = formatted.split('\n');
+        const processedLines = lines.map(line => {
+          const trimmedLine = line.trim();
+          // 빈 줄은 그대로
+          if (!trimmedLine) return '';
+          // 이미 전각 공백으로 시작하면 그대로
+          if (trimmedLine.startsWith('　')) return trimmedLine;
+          // 일반 공백으로 들여쓰기된 경우 전각 공백으로 변경
+          if (line.startsWith('  ') || line.startsWith('\t')) {
+            return '　' + trimmedLine;
+          }
+          // 들여쓰기 없는 문단에 전각 공백 추가
+          return '　' + trimmedLine;
+        });
+
+        formatted = processedLines.join('\n');
+
+        // 대화문 앞뒤 빈 줄 보장
+        formatted = formatted.replace(/([^\n])\n(　")/g, '$1\n\n$2');
+        formatted = formatted.replace(/(["'"'])\n(　[^"'])/g, '$1\n\n$2');
+
+        return formatted;
+      };
+
+      const formattedResponse = formatNovelText(response);
+      const newContent = content ? content + '\n\n\n' + formattedResponse : formattedResponse;
       setContent(newContent);
 
       // 자동 저장

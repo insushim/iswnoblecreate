@@ -158,14 +158,19 @@ ${typeSpecificPrompt}
 2. 소설 문체 유지 (HTML 태그 없이 순수 텍스트)
 3. 캐릭터의 성격과 말투 반영
 4. 현재 내용과 자연스럽게 연결
-5. 독자의 몰입을 해치지 않는 흐름
 
-## 포맷팅 규칙 (필수!)
-1. 각 문단의 첫 줄은 두 칸 들여쓰기 (공백 2개)
-2. 문단 사이는 빈 줄 하나로 구분
-3. 대화문도 새 줄에서 두 칸 들여쓰기 후 큰따옴표로 시작
-4. 절대 ***, ---, === 같은 구분선 사용 금지
-5. 절대 *로 강조 표시 금지
+## 출판용 원고 형식 (필수!)
+1. 들여쓰기: 모든 문단 첫 줄은 전각 공백(　) 하나로 시작
+2. 문단 구분: 문단 사이에 빈 줄 하나
+3. 대화문: 새 줄에서 전각 공백 후 큰따옴표로 시작
+4. 금지: *, #, -, =, _ 등 특수문자 구분선/강조 절대 금지
+
+예시:
+　그녀는 창가에 서서 밖을 바라보았다. 하늘에는 구름이 천천히 흘러가고 있었다.
+
+　"무슨 생각해?"
+
+　그가 다가와 물었다. 그녀는 고개를 돌려 그를 바라보았다.
 
 생성된 내용만 출력해주세요.`;
 
@@ -174,7 +179,27 @@ ${typeSpecificPrompt}
         maxTokens: Math.max(500, length[0] * 2),
       });
 
-      setGeneratedContent(response.trim());
+      // 텍스트 후처리 - 출판 형식으로 정리
+      const formatNovelText = (text: string): string => {
+        let formatted = text.trim();
+
+        // 특수문자 구분선 제거
+        formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
+        formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
+
+        // 각 문단에 전각 공백 들여쓰기 추가
+        const lines = formatted.split('\n');
+        const processedLines = lines.map(line => {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) return '';
+          if (trimmedLine.startsWith('　')) return trimmedLine;
+          return '　' + trimmedLine;
+        });
+
+        return processedLines.join('\n');
+      };
+
+      setGeneratedContent(formatNovelText(response));
     } catch (err) {
       console.error('생성 실패:', err);
       setError('콘텐츠 생성에 실패했습니다. 다시 시도해주세요.');
