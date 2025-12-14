@@ -125,7 +125,14 @@ export function CharacterForm({ projectId, character, onSuccess }: CharacterForm
   };
 
   const handleGenerateWithAI = async () => {
-    if (!settings?.geminiApiKey || !name) return;
+    console.log('[CharacterForm] handleGenerateWithAI 호출됨');
+    console.log('[CharacterForm] API 키 존재:', !!settings?.geminiApiKey);
+    console.log('[CharacterForm] 캐릭터 이름:', name);
+
+    if (!settings?.geminiApiKey || !name) {
+      console.error('[CharacterForm] ❌ API 키 또는 이름 없음');
+      return;
+    }
 
     setIsGenerating(true);
 
@@ -197,8 +204,14 @@ export function CharacterForm({ projectId, character, onSuccess }: CharacterForm
       setCatchphrase(result.catchphrases);
       setStartingState(result.startingState);
       setEndingState(result.endingState);
-    } catch (error) {
-      console.error('AI 생성 실패:', error);
+      console.log('[CharacterForm] ✅ AI 생성 완료');
+    } catch (error: unknown) {
+      console.error('[CharacterForm] ❌ AI 생성 실패:');
+      console.error('[CharacterForm] 오류 객체:', error);
+      if (error instanceof Error) {
+        console.error('[CharacterForm] 오류 메시지:', error.message);
+        console.error('[CharacterForm] 오류 스택:', error.stack);
+      }
     } finally {
       setIsGenerating(false);
     }

@@ -68,14 +68,6 @@ const writingStyles = [
   { value: 'humorous', label: '유머러스' },
 ];
 
-const novelLengths = [
-  { value: 50000, label: '단편 (5만자)', chapters: 5, characters: 5, chapterLength: 10000 },
-  { value: 100000, label: '중편 (10만자)', chapters: 10, characters: 8, chapterLength: 10000 },
-  { value: 200000, label: '장편 (20만자)', chapters: 20, characters: 12, chapterLength: 10000 },
-  { value: 500000, label: '대작 (50만자)', chapters: 50, characters: 15, chapterLength: 10000 },
-  { value: 1000000, label: '시리즈급 (100만자)', chapters: 100, characters: 20, chapterLength: 10000 },
-];
-
 export default function PlanningPage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -101,18 +93,27 @@ export default function PlanningPage() {
   const [writingStyle, setWritingStyle] = useState('calm');
   const [dialogueRatio, setDialogueRatio] = useState(40);
   const [descriptionDetail, setDescriptionDetail] = useState(3);
-  const [targetChapterLength, setTargetChapterLength] = useState(5000);
+  const [targetChapterCount, setTargetChapterCount] = useState(10);
+  const [targetChapterLength, setTargetChapterLength] = useState(20000);
+  const [targetSceneLength, setTargetSceneLength] = useState(3000);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
-  const [targetNovelLength, setTargetNovelLength] = useState(200000);
+
+  // 총 목표 글자수 자동 계산 (챕터 수 × 챕터당 글자수)
+  const calculatedTotalLength = targetChapterCount * targetChapterLength;
+  // 예상 권수 계산 (1권 = 약 20만자 기준)
+  const estimatedBooks = Math.ceil(calculatedTotalLength / 200000);
   const [autoGenerateProgress, setAutoGenerateProgress] = useState<{
     step: string;
     current: number;
     total: number;
   } | null>(null);
+  const [generationStep, setGenerationStep] = useState(0); // 0: 시작 전, 1-8: 각 단계
+  const [stepError, setStepError] = useState<string | null>(null);
+  const [isFullAutoMode, setIsFullAutoMode] = useState(false); // 전체 자동 생성 모드
 
   useEffect(() => {
     if (currentProject) {
@@ -129,7 +130,9 @@ export default function PlanningPage() {
       setWritingStyle(currentProject.settings.writingStyle);
       setDialogueRatio(currentProject.settings.dialogueRatio);
       setDescriptionDetail(currentProject.settings.descriptionDetail);
+      setTargetChapterCount(currentProject.settings.targetChapterCount || 10);
       setTargetChapterLength(currentProject.settings.targetChapterLength);
+      setTargetSceneLength(currentProject.settings.targetSceneLength || 3000);
     }
   }, [currentProject]);
 
@@ -154,7 +157,10 @@ export default function PlanningPage() {
           writingStyle: writingStyle as 'calm' | 'elaborate' | 'concise' | 'lyrical' | 'tense' | 'humorous' | 'custom',
           dialogueRatio,
           descriptionDetail,
+          targetChapterCount,
           targetChapterLength,
+          targetSceneLength,
+          targetTotalLength: calculatedTotalLength,
         },
       });
     } finally {
@@ -280,58 +286,83 @@ export default function PlanningPage() {
     }
   };
 
-  // AI 전체 자동 생성 (원클릭으로 모든 것 생성)
-  const handleAutoGenerateAll = async () => {
+  // 단계별 생성 함수들
+  // 분량 라벨 생성
+  const getLengthLabel = () => {
+    if (calculatedTotalLength <= 50000) return '단편';
+    if (calculatedTotalLength <= 100000) return '중편';
+    if (calculatedTotalLength <= 200000) return '장편 (1권)';
+    return `장편 (약 ${estimatedBooks}권)`;
+  };
+
+  // 1단계: 로그라인 + 시놉시스 생성
+  const handleStep1_Synopsis = async () => {
     if (!settings?.geminiApiKey || !concept) {
       alert('API 키와 컨셉을 먼저 입력해주세요.');
       return;
     }
 
     setIsAutoGenerating(true);
-    const totalSteps = 7;
+    setStepError(null);
+    setAutoGenerateProgress({ step: '로그라인 생성 중...', current: 1, total: 3 });
 
     try {
-      // 1단계: 로그라인 생성
-      setAutoGenerateProgress({ step: '로그라인 생성 중...', current: 1, total: totalSteps });
-      const loglinePrompt = `당신은 출판 전문 에디터입니다.
-다음 소설 컨셉을 바탕으로 매력적인 로그라인(한 문장 요약)을 작성해주세요.
+      // 로그라인 생성
+      const loglinePrompt = `당신은 베스트셀러 작가이자 스토리 컨설턴트입니다.
+다음 소설 컨셉을 바탕으로 독자를 사로잡는 로그라인을 작성해주세요.
 
 컨셉: ${concept}
 장르: ${selectedGenres.join(', ') || '판타지, 액션'}
+목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장)
 
-로그라인은 주인공, 갈등, 위기를 한 문장에 담아야 합니다.
-로그라인만 출력하세요.`;
+로그라인 작성 공식:
+[주인공]이/가 [상황/세계]에서 [목표]를 위해 [장애물/적대자]와 맞서 싸우며 [위험/대가]를 감수해야 한다.
+
+매력적인 로그라인 한 문장만 출력하세요.`;
       const newLogline = await generateText(settings.geminiApiKey, loglinePrompt, { temperature: 0.7 });
       setLogline(newLogline.trim());
 
-      // 2단계: 시놉시스 생성
-      setAutoGenerateProgress({ step: '시놉시스 생성 중...', current: 2, total: totalSteps });
-      const synopsisPrompt = `당신은 출판 전문 에디터입니다.
-다음 정보를 바탕으로 500자 내외의 시놉시스를 작성해주세요.
+      // 시놉시스 생성
+      setAutoGenerateProgress({ step: '시놉시스 생성 중...', current: 2, total: 3 });
+      const synopsisPrompt = `당신은 베스트셀러 작가입니다.
+다음 정보를 바탕으로 출판사 제출용 시놉시스를 작성해주세요.
 
 컨셉: ${concept}
 로그라인: ${newLogline}
 장르: ${selectedGenres.join(', ') || '판타지, 액션'}
+목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장)
 
-시놉시스만 출력하세요.`;
-      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, { temperature: 0.7 });
+시놉시스 필수 포함 사항 (2000자 내외):
+1. 도입부 - 세계관 배경, 주인공 소개
+2. 갈등 발생 - 촉발 사건, 목표 설정
+3. 전개 - 시련과 성장, 조력자/적대자
+4. 클라이맥스 - 최대 위기, 결전
+5. 결말 - 갈등 해결, 변화
+
+시놉시스만 출력하세요. 번호 없이 자연스러운 문장으로.`;
+      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, { temperature: 0.7, maxTokens: 4096 });
       setSynopsis(newSynopsis.trim());
 
-      // 3단계: 상세 시놉시스 생성
-      setAutoGenerateProgress({ step: '상세 시놉시스 생성 중...', current: 3, total: totalSteps });
-      const detailedPrompt = `다음 시놉시스를 1500자 내외의 상세 시놉시스로 확장해주세요.
-기승전결 구조로 주요 플롯 포인트를 포함하세요.
+      // 상세 시놉시스 생성
+      setAutoGenerateProgress({ step: '상세 시놉시스 생성 중...', current: 3, total: 3 });
+      const detailedPrompt = `당신은 베스트셀러 작가입니다.
+다음 시놉시스를 바탕으로 상세 기획서를 작성해주세요.
 
 시놉시스: ${newSynopsis}
+장르: ${selectedGenres.join(', ')}
+목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장, 챕터당 ${targetChapterLength.toLocaleString()}자)
 
-상세 시놉시스만 출력하세요.`;
-      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7 });
+상세 시놉시스 (5000자 내외):
+- 1부 기(起): 도입부 상세
+- 2부 승(承): 전개부 상세
+- 3부 전(轉): 위기부 상세
+- 4부 결(結): 결말부 상세
+
+각 부분을 상세하게 서술해주세요.`;
+      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7, maxTokens: 8192 });
       setDetailedSynopsis(newDetailed.trim());
 
-      // 기획 저장 - 선택된 분량에 맞춰 설정
-      const selectedLength = novelLengths.find(l => l.value === targetNovelLength) || novelLengths[2];
-      const calculatedChapterLength = selectedLength.chapterLength; // 10,000자/챕터
-
+      // 저장
       await updateProject(projectId, {
         title: title || '새 소설',
         concept,
@@ -340,13 +371,16 @@ export default function PlanningPage() {
         detailedSynopsis: newDetailed.trim(),
         genre: selectedGenres.length > 0 ? selectedGenres : ['판타지', '액션'],
         settings: {
+          ...currentProject?.settings,
           writingStyle: writingStyle as 'calm' | 'elaborate' | 'concise' | 'lyrical' | 'tense' | 'humorous' | 'custom',
           perspective: perspective as 'first' | 'third-limited' | 'omniscient' | 'second',
           tense: currentProject?.settings?.tense || 'past',
           dialogueRatio,
           descriptionDetail,
-          targetChapterLength: calculatedChapterLength,
-          targetTotalLength: targetNovelLength,
+          targetChapterCount,
+          targetChapterLength,
+          targetSceneLength,
+          targetTotalLength: calculatedTotalLength,
           pacingPreference: currentProject?.settings?.pacingPreference || 'moderate',
           emotionIntensity: currentProject?.settings?.emotionIntensity || 5,
           language: currentProject?.settings?.language || 'ko',
@@ -354,68 +388,119 @@ export default function PlanningPage() {
         },
       });
 
-      // 4단계: 세계관 생성
-      setAutoGenerateProgress({ step: '세계관 생성 중...', current: 4, total: totalSteps });
-      const worldPrompt = `다음 소설 정보를 바탕으로 세계관 설정 5개를 JSON 배열로 생성해주세요.
+      setGenerationStep(1);
+      // 전체 자동 생성 중이 아닐 때만 알림
+      if (!isFullAutoMode) {
+        alert('1단계 완료! 로그라인, 시놉시스, 상세 시놉시스가 생성되었습니다.');
+      }
+    } catch (error: unknown) {
+      console.error('1단계 실패:', error);
+      setStepError(error instanceof Error ? error.message : '알 수 없는 오류');
+      throw error; // 전체 자동 생성 시 에러를 상위로 전파
+    } finally {
+      if (!isFullAutoMode) {
+        setIsAutoGenerating(false);
+        setAutoGenerateProgress(null);
+      }
+    }
+  };
+
+  // 2단계: 세계관 생성
+  const handleStep2_World = async () => {
+    if (!settings?.geminiApiKey) {
+      alert('API 키를 먼저 설정해주세요.');
+      return;
+    }
+
+    setIsAutoGenerating(true);
+    setStepError(null);
+    setAutoGenerateProgress({ step: '세계관 생성 중...', current: 1, total: 1 });
+
+    try {
+      const worldPrompt = `당신은 세계관 전문가입니다.
+다음 소설 정보를 바탕으로 세계관 설정 8개를 JSON 배열로 생성해주세요.
 
 제목: ${title}
 컨셉: ${concept}
-시놉시스: ${newSynopsis}
+시놉시스: ${synopsis}
 장르: ${selectedGenres.join(', ')}
 
-JSON 형식:
+JSON 형식 (반드시 이 형식만 출력):
 [
-  {"category": "magic", "title": "마법 체계", "description": "설명...", "importance": "core"},
-  ...
+  {"category": "time", "title": "시대 배경", "description": "설명 100자 이상", "importance": "core"},
+  {"category": "space", "title": "지리/공간", "description": "설명 100자 이상", "importance": "core"}
 ]
 
-카테고리: time, space, society, culture, economy, politics, religion, technology, magic, nature, history, language, custom
-중요도: core, major, minor`;
+category 값: time, space, society, magic, technology, history, culture, politics, economy, religion, custom
+importance 값: core, major, minor
+
+8개 항목을 JSON 배열로만 출력하세요.`;
 
       const worldResult = await generateJSON<Array<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>>(
-        settings.geminiApiKey, worldPrompt, { temperature: 0.7 }
+        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
       );
 
       for (const world of worldResult) {
         await createWorldSetting(projectId, world);
       }
 
-      // 5단계: 캐릭터 생성
-      setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 5, total: totalSteps });
-      const numCharacters = selectedLength.characters;
+      setGenerationStep(2);
+      if (!isFullAutoMode) {
+        alert(`2단계 완료! 세계관 ${worldResult.length}개가 생성되었습니다.`);
+      }
+    } catch (error: unknown) {
+      console.error('2단계 실패:', error);
+      setStepError(error instanceof Error ? error.message : '알 수 없는 오류');
+      throw error;
+    } finally {
+      if (!isFullAutoMode) {
+        setIsAutoGenerating(false);
+        setAutoGenerateProgress(null);
+      }
+    }
+  };
 
-      const characterPrompt = `다음 소설 정보를 바탕으로 주요 캐릭터 ${numCharacters}명을 JSON 배열로 생성해주세요.
+  // 3단계: 캐릭터 생성
+  const handleStep3_Characters = async () => {
+    if (!settings?.geminiApiKey) {
+      alert('API 키를 먼저 설정해주세요.');
+      return;
+    }
+
+    setIsAutoGenerating(true);
+    setStepError(null);
+    setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 1, total: 1 });
+
+    try {
+      // 분량에 따른 캐릭터 수 계산 (최대 15명)
+      const numCharacters = Math.min(Math.max(Math.ceil(calculatedTotalLength / 100000) * 5, 5), 15);
+
+      const characterPrompt = `당신은 캐릭터 디자인 전문가입니다.
+다음 소설 정보를 바탕으로 캐릭터 ${numCharacters}명을 JSON 배열로 생성해주세요.
 
 제목: ${title}
 컨셉: ${concept}
-시놉시스: ${newSynopsis}
-목표 분량: ${selectedLength.label}
+시놉시스: ${synopsis}
 
-JSON 형식:
+JSON 형식 (반드시 이 형식만 출력):
 [
   {
-    "name": "이름",
+    "name": "홍길동",
     "role": "protagonist",
-    "age": "20",
+    "age": "25",
     "gender": "남성",
-    "occupation": "직업",
-    "personality": "성격 설명 (2-3문장)",
-    "background": "배경 스토리 (2-3문장)",
-    "motivation": "동기",
+    "occupation": "검객",
+    "personality": "성격 설명 3-5문장",
+    "background": "배경 스토리 3-5문장",
+    "motivation": "동기 1-2문장",
     "goal": "목표",
-    "appearance": "외모 설명"
-  },
-  ...
+    "appearance": "외모 설명 2-3문장"
+  }
 ]
 
-역할 배분 (총 ${numCharacters}명):
-- protagonist(주인공): 1-2명
-- antagonist(악역/적대자): 1-2명
-- deuteragonist(조연 주인공/히로인): 1-2명
-- supporting(주요 조연): ${Math.max(2, numCharacters - 6)}명
-- minor(단역/엑스트라): 나머지
+role 값: protagonist, antagonist, deuteragonist, supporting, minor
 
-각 캐릭터는 개성있는 이름과 뚜렷한 성격을 가져야 합니다.`;
+${numCharacters}명의 캐릭터를 JSON 배열로만 출력하세요.`;
 
       const characterResult = await generateJSON<Array<{
         name: string;
@@ -428,7 +513,7 @@ JSON 형식:
         motivation: string;
         goal: string;
         appearance?: string;
-      }>>(settings.geminiApiKey, characterPrompt, { temperature: 0.8 });
+      }>>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 6000 });
 
       for (const char of characterResult) {
         await createCharacter(projectId, {
@@ -453,7 +538,7 @@ JSON 형식:
             tone: '',
           },
           arc: {
-            type: 'positive',
+            type: char.role === 'protagonist' ? 'positive' : (char.role === 'antagonist' ? 'negative' : 'flat'),
             startingState: '',
             endingState: '',
             keyMoments: [],
@@ -461,30 +546,59 @@ JSON 형식:
         });
       }
 
-      // 6단계: 플롯 포인트 생성
-      setAutoGenerateProgress({ step: '플롯 구조 생성 중...', current: 6, total: totalSteps });
+      setGenerationStep(3);
+      if (!isFullAutoMode) {
+        alert(`3단계 완료! 캐릭터 ${characterResult.length}명이 생성되었습니다.`);
+      }
+    } catch (error: unknown) {
+      console.error('3단계 실패:', error);
+      setStepError(error instanceof Error ? error.message : '알 수 없는 오류');
+      throw error;
+    } finally {
+      if (!isFullAutoMode) {
+        setIsAutoGenerating(false);
+        setAutoGenerateProgress(null);
+      }
+    }
+  };
+
+  // 4단계: 플롯 생성
+  const handleStep4_Plot = async () => {
+    if (!settings?.geminiApiKey) {
+      alert('API 키를 먼저 설정해주세요.');
+      return;
+    }
+
+    setIsAutoGenerating(true);
+    setStepError(null);
+    setAutoGenerateProgress({ step: '플롯 구조 생성 중...', current: 1, total: 1 });
+
+    try {
       await fetchPlotStructure(projectId);
 
-      const plotPrompt = `다음 소설 정보를 바탕으로 주요 플롯 포인트 7개를 JSON 배열로 생성해주세요.
+      const plotPrompt = `당신은 스토리 구조 전문가입니다.
+다음 소설 정보를 바탕으로 플롯 포인트 8개를 JSON 배열로 생성해주세요.
 
 제목: ${title}
-시놉시스: ${newSynopsis}
-상세 시놉시스: ${newDetailed}
+시놉시스: ${synopsis}
+상세 시놉시스: ${detailedSynopsis.slice(0, 1500)}
 
-JSON 형식:
+JSON 형식 (반드시 이 형식만 출력):
 [
-  {"title": "제목", "description": "설명", "type": "opening", "order": 0},
-  ...
+  {"title": "도입", "description": "설명 2-3문장", "type": "opening", "order": 1},
+  {"title": "촉발 사건", "description": "설명 2-3문장", "type": "inciting-incident", "order": 2}
 ]
 
-타입: opening, inciting-incident, first-plot-point, midpoint, second-plot-point, climax, resolution`;
+type 값: opening, inciting-incident, first-plot-point, rising-action, midpoint, second-plot-point, climax, resolution
+
+8개 플롯 포인트를 JSON 배열로만 출력하세요.`;
 
       const plotResult = await generateJSON<Array<{
         title: string;
         description: string;
         type: PlotPoint['type'];
         order: number;
-      }>>(settings.geminiApiKey, plotPrompt, { temperature: 0.7 });
+      }>>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 4096 });
 
       for (const plot of plotResult) {
         await addPlotPoint({
@@ -494,29 +608,59 @@ JSON 형식:
         });
       }
 
-      // 7단계: 챕터 구조 생성
-      setAutoGenerateProgress({ step: '챕터 구조 생성 중...', current: 7, total: totalSteps });
-      const numChapters = selectedLength.chapters;
-      const chapterPrompt = `다음 소설 정보를 바탕으로 ${numChapters}개 챕터 구조를 JSON 배열로 생성해주세요.
+      setGenerationStep(4);
+      if (!isFullAutoMode) {
+        alert(`4단계 완료! 플롯 포인트 ${plotResult.length}개가 생성되었습니다.`);
+      }
+    } catch (error: unknown) {
+      console.error('4단계 실패:', error);
+      setStepError(error instanceof Error ? error.message : '알 수 없는 오류');
+      throw error;
+    } finally {
+      if (!isFullAutoMode) {
+        setIsAutoGenerating(false);
+        setAutoGenerateProgress(null);
+      }
+    }
+  };
 
-시놉시스: ${newSynopsis}
-상세 시놉시스: ${newDetailed}
-목표 분량: ${selectedLength.label} (총 ${numChapters}장)
+  // 5단계: 챕터 생성
+  const handleStep5_Chapters = async () => {
+    if (!settings?.geminiApiKey) {
+      alert('API 키를 먼저 설정해주세요.');
+      return;
+    }
 
-JSON 형식:
+    setIsAutoGenerating(true);
+    setStepError(null);
+    setAutoGenerateProgress({ step: '챕터 구조 생성 중...', current: 1, total: 1 });
+
+    try {
+      const chapterPrompt = `당신은 소설 구성 전문가입니다.
+다음 소설 정보를 바탕으로 ${targetChapterCount}개 챕터를 JSON 배열로 생성해주세요.
+
+시놉시스: ${synopsis}
+상세 시놉시스: ${detailedSynopsis.slice(0, 2000)}
+목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장, 챕터당 ${targetChapterLength.toLocaleString()}자)
+
+JSON 형식 (반드시 이 형식만 출력):
 [
-  {"number": 1, "title": "제목", "purpose": "이 챕터의 목적", "keyEvents": ["주요 사건1", "주요 사건2"]},
-  ...
+  {
+    "number": 1,
+    "title": "챕터 제목",
+    "purpose": "이 챕터의 목적 1-2문장",
+    "keyEvents": ["사건1", "사건2", "사건3"]
+  }
 ]
 
-각 챕터는 스토리 진행에 맞게 기승전결 구조를 따르고, 제목은 흥미를 끄는 것으로 작성해주세요.`;
+${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
 
       const chapterResult = await generateJSON<Array<{
         number: number;
         title: string;
         purpose: string;
         keyEvents: string[];
-      }>>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7 });
+      }>>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 8192 });
 
       for (const chapter of chapterResult) {
         await createChapter(projectId, {
@@ -528,19 +672,64 @@ JSON 형식:
         });
       }
 
-      setAutoGenerateProgress({ step: '완료!', current: totalSteps, total: totalSteps });
-
-      // 완료 알림
-      setTimeout(() => {
-        setAutoGenerateProgress(null);
-        alert('AI 자동 생성이 완료되었습니다! 각 메뉴에서 결과를 확인하고 수정할 수 있습니다.');
-      }, 1000);
-
-    } catch (error) {
-      console.error('자동 생성 실패:', error);
-      alert('자동 생성 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setGenerationStep(5);
+      if (!isFullAutoMode) {
+        alert(`5단계 완료! 챕터 ${chapterResult.length}개가 생성되었습니다.\n\n모든 기획이 완료되었습니다!`);
+      }
+    } catch (error: unknown) {
+      console.error('5단계 실패:', error);
+      setStepError(error instanceof Error ? error.message : '알 수 없는 오류');
+      throw error;
     } finally {
+      if (!isFullAutoMode) {
+        setIsAutoGenerating(false);
+        setAutoGenerateProgress(null);
+      }
+    }
+  };
+
+  // 전체 자동 생성 (순차 실행)
+  const handleAutoGenerateAll = async () => {
+    if (!settings?.geminiApiKey || !concept) {
+      alert('API 키와 컨셉을 먼저 입력해주세요.');
+      return;
+    }
+
+    setIsFullAutoMode(true);
+    setIsAutoGenerating(true);
+    setStepError(null);
+
+    try {
+      // 1단계: 시놉시스
+      setAutoGenerateProgress({ step: '1단계: 시놉시스 생성 중...', current: 1, total: 5 });
+      await handleStep1_Synopsis();
+
+      // 2단계: 세계관
+      setAutoGenerateProgress({ step: '2단계: 세계관 생성 중...', current: 2, total: 5 });
+      await handleStep2_World();
+
+      // 3단계: 캐릭터
+      setAutoGenerateProgress({ step: '3단계: 캐릭터 생성 중...', current: 3, total: 5 });
+      await handleStep3_Characters();
+
+      // 4단계: 플롯
+      setAutoGenerateProgress({ step: '4단계: 플롯 생성 중...', current: 4, total: 5 });
+      await handleStep4_Plot();
+
+      // 5단계: 챕터
+      setAutoGenerateProgress({ step: '5단계: 챕터 생성 중...', current: 5, total: 5 });
+      await handleStep5_Chapters();
+
+      // 전체 완료 알림
+      alert('전체 자동 생성이 완료되었습니다!\n\n각 메뉴에서 결과를 확인하고 수정할 수 있습니다.');
+    } catch (error) {
+      console.error('전체 자동 생성 실패:', error);
+      const failedStep = autoGenerateProgress?.step || '알 수 없는 단계';
+      alert(`자동 생성 중 오류가 발생했습니다.\n\n실패 단계: ${failedStep}\n\n해당 단계부터 다시 시도해주세요.`);
+    } finally {
+      setIsFullAutoMode(false);
       setIsAutoGenerating(false);
+      setAutoGenerateProgress(null);
     }
   };
 
@@ -614,47 +803,248 @@ JSON 형식:
         </div>
       </div>
 
-      {/* 자동 생성 안내 카드 */}
-      {!isAutoGenerating && (
-        <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
-          <CardContent className="py-4">
+      {/* 단계별 생성 카드 */}
+      <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
+        <CardContent className="py-4">
+          <div className="space-y-4">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-full bg-primary/10">
                 <Sparkles className="h-6 w-6 text-primary" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold">AI가 모든 것을 자동으로 생성합니다</h3>
+                <h3 className="font-semibold">AI 단계별 기획 생성</h3>
                 <p className="text-sm text-muted-foreground">
-                  컨셉만 입력하면 로그라인, 시놉시스, 세계관, 캐릭터, 플롯, 챕터까지 모두 AI가 생성합니다.
-                  생성 후 각 메뉴에서 내용을 확인하고 수정하세요.
+                  각 항목을 개별 생성하거나, 단계별로 진행하세요.
                 </p>
-                {/* 목표 분량 선택 */}
-                <div className="flex items-center gap-3 mt-3">
-                  <Label className="text-sm whitespace-nowrap">목표 분량:</Label>
-                  <Select value={targetNovelLength.toString()} onValueChange={(v) => setTargetNovelLength(Number(v))}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {novelLengths.map((length) => (
-                        <SelectItem key={length.value} value={length.value.toString()}>
-                          {length.label} ({length.chapters}장, {length.characters}명)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              </div>
+            </div>
+
+            {/* 목표 분량 설정 */}
+            <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">목표 총 분량</span>
+                <span className="text-xl font-bold text-primary">
+                  {calculatedTotalLength.toLocaleString()}자
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({getLengthLabel()})
+                  </span>
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">총 챕터 수</Label>
+                    <span className="text-sm text-muted-foreground">{targetChapterCount}장</span>
+                  </div>
+                  <Slider
+                    value={[targetChapterCount]}
+                    onValueChange={([v]) => setTargetChapterCount(v)}
+                    min={1}
+                    max={100}
+                    step={1}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">챕터당 글자수</Label>
+                    <span className="text-sm text-muted-foreground">{targetChapterLength.toLocaleString()}자</span>
+                  </div>
+                  <Slider
+                    value={[targetChapterLength]}
+                    onValueChange={([v]) => setTargetChapterLength(v)}
+                    min={5000}
+                    max={200000}
+                    step={5000}
+                  />
                 </div>
               </div>
-              {concept && (
-                <Button onClick={handleAutoGenerateAll} disabled={isAutoGenerating} className="gap-2">
-                  <Wand2 className="h-4 w-4" />
-                  지금 생성
+              <p className="text-xs text-muted-foreground">
+                1권 = 약 20만자 기준 | 챕터당 최대 20만자 (소설책 1권 분량)
+              </p>
+            </div>
+
+            {/* 에러 표시 */}
+            {stepError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
+                오류: {stepError}
+              </div>
+            )}
+
+            {/* 진행 상태 표시 */}
+            {isAutoGenerating && autoGenerateProgress && (
+              <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">{autoGenerateProgress.step}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 1단계: 시놉시스 */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">1</span>
+                  <span className="font-medium">시놉시스</span>
+                  {generationStep >= 1 && <CheckCircle className="h-4 w-4 text-green-500" />}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={generateLogline}
+                  disabled={isAutoGenerating || isGenerating || !concept}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                >
+                  {isGenerating && generatingType === 'logline' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                  로그라인 생성
                 </Button>
+                <Button
+                  onClick={generateSynopsis}
+                  disabled={isAutoGenerating || isGenerating || !concept}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                >
+                  {isGenerating && generatingType === 'synopsis' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                  시놉시스 생성
+                </Button>
+                <Button
+                  onClick={generateDetailedSynopsis}
+                  disabled={isAutoGenerating || isGenerating || !synopsis}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                >
+                  {isGenerating && generatingType === 'detailed' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                  상세 시놉시스 생성
+                </Button>
+                <Button
+                  onClick={handleStep1_Synopsis}
+                  disabled={isAutoGenerating || !concept}
+                  variant="default"
+                  size="sm"
+                  className="gap-1"
+                >
+                  <Rocket className="h-3 w-3" />
+                  1단계 전체 생성
+                </Button>
+              </div>
+              {(logline || synopsis) && (
+                <div className="text-xs text-muted-foreground">
+                  로그라인: {logline ? '✓' : '✗'} | 시놉시스: {synopsis ? `${synopsis.length}자` : '✗'} | 상세: {detailedSynopsis ? `${detailedSynopsis.length}자` : '✗'}
+                </div>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+
+            {/* 2단계: 세계관 */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">2</span>
+                  <span className="font-medium">세계관</span>
+                  {generationStep >= 2 && <CheckCircle className="h-4 w-4 text-green-500" />}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleStep2_World}
+                  disabled={isAutoGenerating || !synopsis}
+                  variant={generationStep >= 2 ? "secondary" : "default"}
+                  size="sm"
+                  className="gap-1"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  세계관 생성 (8개)
+                </Button>
+              </div>
+            </div>
+
+            {/* 3단계: 캐릭터 */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">3</span>
+                  <span className="font-medium">캐릭터</span>
+                  {generationStep >= 3 && <CheckCircle className="h-4 w-4 text-green-500" />}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleStep3_Characters}
+                  disabled={isAutoGenerating || !synopsis}
+                  variant={generationStep >= 3 ? "secondary" : "default"}
+                  size="sm"
+                  className="gap-1"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  캐릭터 생성 ({Math.min(Math.max(Math.ceil(calculatedTotalLength / 100000) * 5, 5), 15)}명)
+                </Button>
+              </div>
+            </div>
+
+            {/* 4단계: 플롯 */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">4</span>
+                  <span className="font-medium">플롯</span>
+                  {generationStep >= 4 && <CheckCircle className="h-4 w-4 text-green-500" />}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleStep4_Plot}
+                  disabled={isAutoGenerating || !synopsis}
+                  variant={generationStep >= 4 ? "secondary" : "default"}
+                  size="sm"
+                  className="gap-1"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  플롯 포인트 생성 (8개)
+                </Button>
+              </div>
+            </div>
+
+            {/* 5단계: 챕터 */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">5</span>
+                  <span className="font-medium">챕터</span>
+                  {generationStep >= 5 && <CheckCircle className="h-4 w-4 text-green-500" />}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleStep5_Chapters}
+                  disabled={isAutoGenerating || !synopsis}
+                  variant={generationStep >= 5 ? "secondary" : "default"}
+                  size="sm"
+                  className="gap-1"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  챕터 구조 생성 ({targetChapterCount}장)
+                </Button>
+              </div>
+            </div>
+
+            {/* 전체 자동 생성 버튼 */}
+            <div className="flex justify-center pt-2 border-t">
+              <Button
+                onClick={handleAutoGenerateAll}
+                disabled={isAutoGenerating || !concept}
+                variant="default"
+                className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              >
+                <Rocket className="h-4 w-4" />
+                전체 자동 생성 (1~5단계 순차 실행)
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="basic" className="space-y-6">
         <TabsList>
@@ -924,10 +1314,30 @@ JSON 형식:
                 <Slider
                   value={[targetChapterLength]}
                   onValueChange={(v) => setTargetChapterLength(v[0])}
-                  min={2000}
-                  max={15000}
-                  step={500}
+                  min={5000}
+                  max={200000}
+                  step={5000}
                 />
+                <p className="text-xs text-muted-foreground">
+                  AI 집필 시 각 챕터에 생성될 목표 글자수입니다. (최대 20만자, 소설책 약 1권 분량)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>씬당 목표 글자수</Label>
+                  <span className="text-sm text-muted-foreground">{targetSceneLength.toLocaleString()}자</span>
+                </div>
+                <Slider
+                  value={[targetSceneLength]}
+                  onValueChange={(v) => setTargetSceneLength(v[0])}
+                  min={1000}
+                  max={50000}
+                  step={1000}
+                />
+                <p className="text-xs text-muted-foreground">
+                  각 씬(장면)에 생성될 목표 글자수입니다. 챕터는 여러 씬으로 구성됩니다.
+                </p>
               </div>
             </CardContent>
           </Card>

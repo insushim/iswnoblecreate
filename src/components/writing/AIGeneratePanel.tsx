@@ -74,11 +74,18 @@ export function AIGeneratePanel({
   const [error, setError] = useState('');
 
   const handleGenerate = async () => {
+    console.log('[AIGeneratePanel] handleGenerate 호출됨');
+    console.log('[AIGeneratePanel] settings 객체:', settings);
+    console.log('[AIGeneratePanel] API 키 존재 여부:', !!settings?.geminiApiKey);
+    console.log('[AIGeneratePanel] API 키 길이:', settings?.geminiApiKey?.length || 0);
+
     if (!settings?.geminiApiKey) {
-      setError('설정에서 Gemini API 키를 등록해주세요.');
+      console.error('[AIGeneratePanel] ❌ API 키가 설정되지 않음!');
+      setError('설정에서 Gemini API 키를 먼저 등록해주세요.');
       return;
     }
 
+    console.log('[AIGeneratePanel] 생성 시작...');
     setIsGenerating(true);
     setError('');
     setGeneratedContent('');
@@ -123,110 +130,143 @@ export function AIGeneratePanel({
           break;
       }
 
-      const prompt = `당신은 전문 소설 작가입니다. 다음 설정에 맞춰 소설 내용을 생성해주세요.
+      const prompt = `당신은 한국의 베스트셀러 소설가입니다.
 
-## 작품 정보
-- 제목: ${currentProject?.title || '제목 없음'}
-- 장르: ${currentProject?.genre?.join(', ') || '일반'}
+[작품 정보]
+제목: ${currentProject?.title || '제목 없음'}
+장르: ${currentProject?.genre?.join(', ') || '일반'}
 
-## 챕터 정보
-- 챕터: ${chapter.title}
-- 목적: ${chapter.purpose || '없음'}
+[챕터] ${chapter.title}
+[씬] ${scene.title} / 장소: ${scene.location || '미정'}
 
-## 씬 정보
-- 씬: ${scene.title}
-- 목표: ${scene.goal || '없음'}
-- 장소: ${scene.location || '미정'}
-
-## 등장인물
+[등장인물]
 ${characterInfo || '등장인물 정보 없음'}
 
-## 현재 내용 (마지막 부분)
+[현재 내용]
 ${lastParagraphs || '(시작 부분)'}
 
-## 생성 요청
+[요청]
 - 유형: ${generationTypes.find((t) => t.value === generationType)?.label}
 - 분위기: ${toneOptions.find((t) => t.value === tone)?.label || '중립적'}
-- 목표 길이: 약 ${length[0]}자
-${customPrompt ? `- 추가 지시: ${customPrompt}` : ''}
+- 분량: ${length[0]}자 이상
+${customPrompt ? `- 추가: ${customPrompt}` : ''}
 
-## 지시사항
+[지시사항]
 ${typeSpecificPrompt}
 
-## 작성 규칙
-1. 한국어로 작성
-2. 소설 문체 유지 (HTML 태그 없이 순수 텍스트)
-3. 캐릭터의 성격과 말투 반영
-4. 현재 내용과 자연스럽게 연결
+[한국 소설책 형식 - 필수]
+실제 출판되는 한국 소설책처럼 작성하세요:
+- 문단 시작: 들여쓰기 한 칸
+- 대화문: "대사" 형식, 따옴표 안에 불필요한 공백 금지
+- 지문: 대사 뒤에 바로 붙이거나 다음 줄에 작성
+- 장면 전환시에만 빈 줄 사용 (문단마다 빈 줄 넣지 않음)
+- 모든 문장은 마침표로 종료
+- 특수문자(*, #, -, =) 금지
 
-## 출판용 원고 형식 (필수!)
-1. 들여쓰기: 모든 문단 첫 줄은 전각 공백(　) 하나로 시작
-2. 문단 구분: 문단 사이에 빈 줄 하나
-3. 대화문: 새 줄에서 전각 공백 후 큰따옴표로 시작
-4. 금지: *, #, -, =, _ 등 특수문자 구분선/강조 절대 금지
+[예시]
+　그녀는 창가에 서서 멍하니 밖을 바라보았다. 하늘에는 붉은 노을이 번지고 있었다.
+　"뭘 그렇게 보고 있어?" 뒤에서 그의 목소리가 들려왔다.
+　그녀는 고개를 돌렸다. "그냥, 노을이 예뻐서." 그녀는 미소를 지으며 대답했다.
 
-예시:
-　그녀는 창가에 서서 밖을 바라보았다. 하늘에는 구름이 천천히 흘러가고 있었다.
+본문만 출력하세요.`;
 
-　"무슨 생각해?"
-
-　그가 다가와 물었다. 그녀는 고개를 돌려 그를 바라보았다.
-
-생성된 내용만 출력해주세요.`;
+      console.log('[AIGeneratePanel] 프롬프트 생성 완료, 길이:', prompt.length);
+      console.log('[AIGeneratePanel] generateText 호출 중...');
 
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: Math.max(500, length[0] * 2),
       });
 
-      // 텍스트 후처리 - 출판 형식으로 정리
+      console.log('[AIGeneratePanel] ✅ 응답 수신 완료, 길이:', response?.length || 0);
+
+      // 텍스트 후처리 - 소설책 형식으로 정리
       const formatNovelText = (text: string): string => {
         let formatted = text.trim();
 
-        // 특수문자 구분선 제거
+        // 특수문자 구분선 제거 (*, -, =, #, _ 등)
         formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
+        formatted = formatted.replace(/^\*{3,}.*$/gm, '');
+        formatted = formatted.replace(/^-{3,}.*$/gm, '');
+        formatted = formatted.replace(/^={3,}.*$/gm, '');
+
+        // **강조** 또는 *강조* 제거
         formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
 
-        // 문장 단위로 분리하여 문단 만들기
-        const sentences = formatted.split(/(?<=[.?!]["'"]?\s*)/);
-        const paragraphs: string[] = [];
-        let currentParagraph: string[] = [];
+        // 대화문 따옴표 정리 - 따옴표 앞뒤 불필요한 공백 제거
+        formatted = formatted.replace(/"\s+/g, '"');
+        formatted = formatted.replace(/\s+"/g, '"');
+        formatted = formatted.replace(/"\s+/g, '"');
+        formatted = formatted.replace(/\s+"/g, '"');
 
-        sentences.forEach((sentence) => {
-          const trimmed = sentence.trim();
-          if (!trimmed) return;
+        // 따옴표 통일 (영문 따옴표를 한글 따옴표로)
+        formatted = formatted.replace(/"/g, '"');
+        formatted = formatted.replace(/"/g, '"');
 
-          if (trimmed.startsWith('"') || trimmed.startsWith('"') || trimmed.startsWith('「')) {
-            if (currentParagraph.length > 0) {
-              paragraphs.push('　' + currentParagraph.join(' '));
-              currentParagraph = [];
+        // 줄 단위로 처리
+        const lines = formatted.split('\n');
+        const processedLines: string[] = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          let line = lines[i].trim();
+
+          // 빈 줄은 장면 전환용으로만 유지
+          if (!line) {
+            if (processedLines.length > 0 && processedLines[processedLines.length - 1] !== '') {
+              processedLines.push('');
             }
-            paragraphs.push('　' + trimmed);
-          } else if (trimmed.endsWith('"') || trimmed.endsWith('"') || trimmed.endsWith('」')) {
-            currentParagraph.push(trimmed);
-            paragraphs.push('　' + currentParagraph.join(' '));
-            currentParagraph = [];
-          } else {
-            currentParagraph.push(trimmed);
-            if (currentParagraph.length >= 3) {
-              paragraphs.push('　' + currentParagraph.join(' '));
-              currentParagraph = [];
-            }
+            continue;
           }
-        });
 
-        if (currentParagraph.length > 0) {
-          paragraphs.push('　' + currentParagraph.join(' '));
+          // 전각 공백 중복 제거 후 하나만 추가
+          line = line.replace(/^[　\s]+/, '');
+
+          // 마침표 누락 체크
+          const endsWithPunctuation = /[.。?!'"」…~,]$/.test(line);
+          if (!endsWithPunctuation && line.length > 0) {
+            line = line + '.';
+          }
+
+          processedLines.push('　' + line);
         }
 
-        return paragraphs.join('\n\n');
+        // 소설책처럼 문단 붙여쓰기
+        let result = '';
+        let prevWasEmpty = false;
+
+        for (let i = 0; i < processedLines.length; i++) {
+          const line = processedLines[i];
+          if (line === '') {
+            if (!prevWasEmpty) {
+              result += '\n';
+              prevWasEmpty = true;
+            }
+          } else {
+            result += (result && !prevWasEmpty ? '\n' : (prevWasEmpty ? '\n' : '')) + line;
+            prevWasEmpty = false;
+          }
+        }
+
+        return result.trim();
       };
 
-      setGeneratedContent(formatNovelText(response));
-    } catch (err) {
-      console.error('생성 실패:', err);
-      setError('콘텐츠 생성에 실패했습니다. 다시 시도해주세요.');
+      const formattedContent = formatNovelText(response);
+      console.log('[AIGeneratePanel] 포맷팅 완료, 최종 길이:', formattedContent?.length || 0);
+      setGeneratedContent(formattedContent);
+    } catch (err: unknown) {
+      console.error('[AIGeneratePanel] ❌ 생성 실패:');
+      console.error('[AIGeneratePanel] 오류 타입:', typeof err);
+      console.error('[AIGeneratePanel] 오류 객체:', err);
+
+      if (err instanceof Error) {
+        console.error('[AIGeneratePanel] 오류 메시지:', err.message);
+        console.error('[AIGeneratePanel] 오류 스택:', err.stack);
+        setError(err.message);
+      } else {
+        setError('콘텐츠 생성에 실패했습니다. 다시 시도해주세요.');
+      }
     } finally {
+      console.log('[AIGeneratePanel] 생성 프로세스 종료');
       setIsGenerating(false);
     }
   };

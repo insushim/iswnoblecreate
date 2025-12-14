@@ -43,18 +43,23 @@ export default function ProjectSettingsPage() {
 
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState<'idea' | 'planning' | 'writing' | 'editing' | 'completed'>('planning');
-  const [targetWordCount, setTargetWordCount] = useState(100000);
+  const [targetChapterCount, setTargetChapterCount] = useState(10);
   const [targetChapterLength, setTargetChapterLength] = useState(10000);
-  const [dailyGoal, setDailyGoal] = useState(1000);
+  const [targetSceneLength, setTargetSceneLength] = useState(3000);
   const [autoSave, setAutoSave] = useState(true);
+
+  // 총 목표 글자수 자동 계산 (챕터 수 × 챕터당 글자수)
+  const calculatedTotalLength = targetChapterCount * targetChapterLength;
+  // 예상 권수 계산 (1권 = 약 20만자 기준)
+  const estimatedBooks = Math.ceil(calculatedTotalLength / 200000);
 
   useEffect(() => {
     if (currentProject) {
       setTitle(currentProject.title);
       setStatus(currentProject.status);
-      setTargetWordCount(currentProject.settings?.targetTotalLength || 100000);
+      setTargetChapterCount(currentProject.settings?.targetChapterCount || 10);
       setTargetChapterLength(currentProject.settings?.targetChapterLength || 10000);
-      setDailyGoal(currentProject.goals?.dailyWordCount || 1000);
+      setTargetSceneLength(currentProject.settings?.targetSceneLength || 3000);
     }
   }, [currentProject]);
 
@@ -68,12 +73,10 @@ export default function ProjectSettingsPage() {
         status,
         settings: {
           ...currentProject.settings,
-          targetTotalLength: targetWordCount,
+          targetChapterCount: targetChapterCount,
           targetChapterLength: targetChapterLength,
-        },
-        goals: {
-          ...currentProject.goals,
-          dailyWordCount: dailyGoal,
+          targetSceneLength: targetSceneLength,
+          targetTotalLength: calculatedTotalLength,
         },
       });
     } catch (error) {
@@ -146,22 +149,37 @@ export default function ProjectSettingsPage() {
       {/* 목표 설정 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">목표 설정</CardTitle>
-          <CardDescription>집필 목표를 설정하세요</CardDescription>
+          <CardTitle className="text-lg">집필 분량 설정</CardTitle>
+          <CardDescription>소설의 목표 분량을 설정하세요</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* 자동 계산된 총 분량 표시 */}
+          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">목표 총 분량</span>
+              <span className="text-2xl font-bold text-primary">{calculatedTotalLength.toLocaleString()}자</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              = {targetChapterCount}장 × {targetChapterLength.toLocaleString()}자/장
+              {estimatedBooks > 0 && ` (약 ${estimatedBooks}권 분량)`}
+            </p>
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>목표 총 글자수</Label>
-              <span className="text-sm text-muted-foreground">{targetWordCount.toLocaleString()}자</span>
+              <Label>총 챕터 수</Label>
+              <span className="text-sm text-muted-foreground">{targetChapterCount}장</span>
             </div>
             <Slider
-              value={[targetWordCount]}
-              onValueChange={([v]) => setTargetWordCount(v)}
-              min={10000}
-              max={500000}
-              step={10000}
+              value={[targetChapterCount]}
+              onValueChange={([v]) => setTargetChapterCount(v)}
+              min={1}
+              max={100}
+              step={1}
             />
+            <p className="text-xs text-muted-foreground">
+              소설의 총 장(챕터) 수입니다. (1~100장)
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -172,27 +190,41 @@ export default function ProjectSettingsPage() {
             <Slider
               value={[targetChapterLength]}
               onValueChange={([v]) => setTargetChapterLength(v)}
-              min={3000}
-              max={15000}
-              step={1000}
+              min={5000}
+              max={200000}
+              step={5000}
             />
             <p className="text-xs text-muted-foreground">
-              AI 자동 집필 시 각 챕터에 생성될 글자수입니다.
+              AI 집필 시 각 챕터에 생성될 글자수입니다. (최대 20만자 = 소설책 약 1권 분량)
             </p>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>일일 목표</Label>
-              <span className="text-sm text-muted-foreground">{dailyGoal.toLocaleString()}자</span>
+              <Label>씬당 목표 글자수</Label>
+              <span className="text-sm text-muted-foreground">{targetSceneLength.toLocaleString()}자</span>
             </div>
             <Slider
-              value={[dailyGoal]}
-              onValueChange={([v]) => setDailyGoal(v)}
-              min={100}
-              max={10000}
-              step={100}
+              value={[targetSceneLength]}
+              onValueChange={([v]) => setTargetSceneLength(v)}
+              min={1000}
+              max={50000}
+              step={1000}
             />
+            <p className="text-xs text-muted-foreground">
+              각 씬(장면)에 생성될 목표 글자수입니다. 챕터는 여러 씬으로 구성됩니다.
+            </p>
+          </div>
+
+          {/* 분량 가이드 */}
+          <div className="pt-4 border-t">
+            <p className="text-xs text-muted-foreground mb-2">분량 참고:</p>
+            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <div>단편소설: 약 5만자 (0.25권)</div>
+              <div>중편소설: 약 10만자 (0.5권)</div>
+              <div>장편소설: 약 20만자 (1권)</div>
+              <div>시리즈물 10권: 약 200만자</div>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -66,32 +66,49 @@ export const db = new NovelForgeDB();
 
 // 기본 앱 설정 초기화
 export async function initializeAppSettings(): Promise<AppSettings> {
+  console.log('[DB] initializeAppSettings 호출됨');
+
   const envApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  const existingSettings = await db.appSettings.get('default');
+  console.log('[DB] 환경 변수 API 키 존재:', !!envApiKey, '길이:', envApiKey?.length || 0);
 
-  if (existingSettings) {
-    // 환경 변수에 API 키가 있으면 항상 사용 (서버 설정 우선)
-    if (envApiKey) {
-      existingSettings.geminiApiKey = envApiKey;
-      await db.appSettings.update('default', { geminiApiKey: envApiKey });
+  try {
+    const existingSettings = await db.appSettings.get('default');
+    console.log('[DB] 기존 설정 조회 결과:', !!existingSettings);
+
+    if (existingSettings) {
+      console.log('[DB] 기존 설정 발견, API 키 존재:', !!existingSettings.geminiApiKey);
+      console.log('[DB] 기존 API 키 길이:', existingSettings.geminiApiKey?.length || 0);
+
+      // 환경 변수에 API 키가 있으면 항상 사용 (서버 설정 우선)
+      if (envApiKey) {
+        console.log('[DB] 환경 변수 API 키로 덮어쓰기');
+        existingSettings.geminiApiKey = envApiKey;
+        await db.appSettings.update('default', { geminiApiKey: envApiKey });
+      }
+      console.log('[DB] ✅ 기존 설정 반환');
+      return existingSettings;
     }
-    return existingSettings;
+
+    console.log('[DB] 기존 설정 없음, 새 설정 생성 중...');
+    const defaultSettings: AppSettings = {
+      id: 'default',
+      theme: 'dark',
+      fontSize: 18,
+      fontFamily: 'Pretendard',
+      autoSave: true,
+      autoSaveInterval: 30,
+      soundEffects: false,
+      notifications: true,
+      geminiApiKey: envApiKey,
+    };
+
+    await db.appSettings.add(defaultSettings);
+    console.log('[DB] ✅ 새 설정 저장 완료');
+    return defaultSettings;
+  } catch (error) {
+    console.error('[DB] ❌ initializeAppSettings 오류:', error);
+    throw error;
   }
-
-  const defaultSettings: AppSettings = {
-    id: 'default',
-    theme: 'dark',
-    fontSize: 18,
-    fontFamily: 'Pretendard',
-    autoSave: true,
-    autoSaveInterval: 30,
-    soundEffects: false,
-    notifications: true,
-    geminiApiKey: envApiKey,
-  };
-
-  await db.appSettings.add(defaultSettings);
-  return defaultSettings;
 }
 
 // 프로젝트 기본값 생성 헬퍼

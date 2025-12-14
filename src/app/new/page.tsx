@@ -51,9 +51,18 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
 
   const handleExpandIdea = async () => {
-    if (!idea.trim()) return;
+    console.log('[NewProject] handleExpandIdea 호출됨');
+    console.log('[NewProject] 아이디어:', idea);
+    console.log('[NewProject] API 키 존재:', !!settings?.geminiApiKey);
+    console.log('[NewProject] API 키 길이:', settings?.geminiApiKey?.length || 0);
+
+    if (!idea.trim()) {
+      console.warn('[NewProject] 아이디어가 비어있음');
+      return;
+    }
 
     if (!settings?.geminiApiKey) {
+      console.error('[NewProject] ❌ API 키가 없습니다!');
       setError('설정에서 Gemini API 키를 먼저 등록해주세요.');
       return;
     }
@@ -92,12 +101,14 @@ ${idea}
 매력적이고 시장성 있는 기획안을 작성해주세요.
 모든 내용은 한국어로 작성하세요.`;
 
+      console.log('[NewProject] generateJSON 호출 중...');
       const result = await generateJSON<IdeaExpansionResult>(
         settings.geminiApiKey,
         prompt,
         { temperature: 0.8 }
       );
 
+      console.log('[NewProject] ✅ 결과 수신:', result);
       setExpansionResult(result);
       if (result.titles.length > 0) {
         setSelectedTitle(result.titles[0].title);
@@ -105,9 +116,16 @@ ${idea}
       if (result.genres.length > 0) {
         setSelectedGenres(result.genres.map(g => g.genre));
       }
-    } catch (error) {
-      console.error('아이디어 확장 실패:', error);
-      setError('아이디어 확장에 실패했습니다. 다시 시도해주세요.');
+    } catch (error: unknown) {
+      console.error('[NewProject] ❌ 아이디어 확장 실패:');
+      console.error('[NewProject] 오류 객체:', error);
+      if (error instanceof Error) {
+        console.error('[NewProject] 오류 메시지:', error.message);
+        console.error('[NewProject] 오류 스택:', error.stack);
+        setError(error.message);
+      } else {
+        setError('아이디어 확장에 실패했습니다. 다시 시도해주세요.');
+      }
     } finally {
       setIsGenerating(false);
     }

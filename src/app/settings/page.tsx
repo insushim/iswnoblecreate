@@ -50,18 +50,27 @@ export default function SettingsPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const handleSaveApiKey = async () => {
+    console.log('[Settings] handleSaveApiKey 호출됨');
+    console.log('[Settings] 저장할 API 키 길이:', apiKey?.length || 0);
+    console.log('[Settings] API 키 앞 10자:', apiKey?.substring(0, 10) + '...');
+
     setSaveStatus('saving');
     try {
       await updateSettings({ geminiApiKey: apiKey });
+      console.log('[Settings] ✅ API 키 저장 성공');
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
+      console.error('[Settings] ❌ API 키 저장 실패:', error);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 2000);
     }
   };
 
   const handleSaveSettings = async () => {
+    console.log('[Settings] handleSaveSettings 호출됨');
+    console.log('[Settings] 저장할 설정:', { theme, fontSize: editorFontSize, fontFamily: editorFontFamily });
+
     setSaveStatus('saving');
     try {
       await updateSettings({
@@ -69,9 +78,11 @@ export default function SettingsPage() {
         fontSize: editorFontSize,
         fontFamily: editorFontFamily,
       });
+      console.log('[Settings] ✅ 설정 저장 성공');
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
+      console.error('[Settings] ❌ 설정 저장 실패:', error);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 2000);
     }

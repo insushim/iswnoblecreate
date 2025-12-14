@@ -156,7 +156,80 @@ export default function ChapterEditorPage() {
     setShowAIPanel(false);
   };
 
-  // AI 자동 집필 - 전체 챕터 생성
+  // 텍스트 후처리 - 출판 형식으로 정리 (소설책 스타일)
+  const formatNovelText = useCallback((text: string): string => {
+    let formatted = text.trim();
+
+    // 특수문자 구분선 제거 (*, -, =, #, _ 등)
+    formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
+    formatted = formatted.replace(/^\*{3,}.*$/gm, '');
+    formatted = formatted.replace(/^-{3,}.*$/gm, '');
+    formatted = formatted.replace(/^={3,}.*$/gm, '');
+
+    // **강조** 또는 *강조* 제거
+    formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
+
+    // 대화문 따옴표 정리 - 따옴표 앞뒤 불필요한 공백 제거
+    formatted = formatted.replace(/"\s+/g, '"');
+    formatted = formatted.replace(/\s+"/g, '"');
+    formatted = formatted.replace(/"\s+/g, '"');
+    formatted = formatted.replace(/\s+"/g, '"');
+
+    // 따옴표 통일 (영문 따옴표를 한글 따옴표로)
+    formatted = formatted.replace(/"/g, '"');
+    formatted = formatted.replace(/"/g, '"');
+
+    // 줄 단위로 처리
+    const lines = formatted.split('\n');
+    const processedLines: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+
+      // 빈 줄은 장면 전환용으로만 유지 (연속 빈줄 제거)
+      if (!line) {
+        // 이전 줄이 빈 줄이 아닐 때만 빈 줄 추가
+        if (processedLines.length > 0 && processedLines[processedLines.length - 1] !== '') {
+          processedLines.push('');
+        }
+        continue;
+      }
+
+      // 전각 공백 중복 제거 후 하나만 추가
+      line = line.replace(/^[　\s]+/, ''); // 앞의 모든 공백 제거
+
+      // 마침표 누락 체크 - 문장부호로 끝나지 않으면 마침표 추가
+      const endsWithPunctuation = /[.。?!'"」…~, ]$/.test(line);
+      if (!endsWithPunctuation && line.length > 0) {
+        line = line + '.';
+      }
+
+      // 전각 공백으로 들여쓰기
+      processedLines.push('　' + line);
+    }
+
+    // 결과 생성 - 소설책처럼 문단 붙여쓰기 (장면 전환만 빈 줄)
+    let result = '';
+    let prevWasEmpty = false;
+
+    for (let i = 0; i < processedLines.length; i++) {
+      const line = processedLines[i];
+
+      if (line === '') {
+        if (!prevWasEmpty) {
+          result += '\n'; // 장면 전환을 위한 빈 줄
+          prevWasEmpty = true;
+        }
+      } else {
+        result += (result && !prevWasEmpty ? '\n' : (prevWasEmpty ? '\n' : '')) + line;
+        prevWasEmpty = false;
+      }
+    }
+
+    return result.trim();
+  }, []);
+
+  // AI 자동 집필 - 전체 챕터 생성 (목표 글자수까지 반복, 최대 20만자)
   const handleAutoWriteChapter = async () => {
     if (!settings?.geminiApiKey || !currentProject || !currentChapter) return;
 
@@ -166,142 +239,194 @@ export default function ChapterEditorPage() {
     }
 
     setIsAutoWriting(true);
+
+    const targetLength = currentProject.settings?.targetChapterLength || 10000;
+    let currentText = content;
+    let iteration = 0;
+    // 20만자 기준 약 50회 반복 필요 (회당 ~4000자)
+    const maxIterations = Math.ceil(targetLength / 3000) + 10; // 목표에 따라 동적 설정
+    let consecutiveErrors = 0;
+
     try {
+      // 상세 캐릭터 정보 구성 (새로운 확장 필드 활용)
       const characterInfo = characters
-        .slice(0, 5)
-        .map(c => `- ${c.name} (${c.role}): ${c.personality}\n  배경: ${c.background}`)
-        .join('\n');
+        .slice(0, 8)
+        .map(c => {
+          let info = `[${c.name}] (${c.role})`;
+          info += `\n  성격: ${c.personality}`;
+          info += `\n  배경: ${c.background}`;
+          // 확장 필드가 있으면 포함
+          if (c.speechStyle) {
+            info += `\n  말투: ${c.speechStyle}`;
+          }
+          if (c.strengths?.length > 0) {
+            info += `\n  강점: ${c.strengths.join(', ')}`;
+          }
+          if (c.weaknesses?.length > 0) {
+            info += `\n  약점: ${c.weaknesses.join(', ')}`;
+          }
+          if (c.motivation) {
+            info += `\n  동기: ${c.motivation}`;
+          }
+          return info;
+        })
+        .join('\n\n');
 
+      // 상세 세계관 정보 구성
       const worldInfo = worldSettings
-        .slice(0, 5)
-        .map(w => `- ${w.title}: ${w.description}`)
-        .join('\n');
+        .slice(0, 8)
+        .map(w => `【${w.title}】\n${w.description}`)
+        .join('\n\n');
 
-      const prompt = `당신은 한국의 베스트셀러 소설가입니다. 출판용 소설 원고를 작성합니다.
+      // 챕터별 씬 개요 정보 구성
+      const sceneOutlineInfo = currentChapter.sceneOutline && currentChapter.sceneOutline.length > 0
+        ? currentChapter.sceneOutline.map((scene: string, idx: number) => `  씬${idx + 1}: ${scene}`).join('\n')
+        : null;
+
+      // 목표 글자수에 도달할 때까지 반복 생성
+      while (currentText.length < targetLength && iteration < maxIterations) {
+        iteration++;
+        const currentLength = currentText.length; // 공백 포함 글자수
+        const remainingLength = targetLength - currentLength;
+        const progress = Math.round((currentLength / targetLength) * 100);
+
+        console.log(`[자동집필] ${iteration}회차 - 현재: ${currentLength.toLocaleString()}자 / 목표: ${targetLength.toLocaleString()}자 (${progress}%)`);
+
+        // 첫 생성인지 이어쓰기인지에 따라 프롬프트 조정
+        const isFirstGeneration = currentLength < 500;
+        const recentContent = currentText.slice(-3000); // 최근 3000자 참조 (맥락 유지)
+
+        // 현재 진행 상황에 따른 씬 가이드
+        const totalScenes = currentChapter.sceneOutline?.length || 5;
+        const currentSceneIdx = Math.floor((progress / 100) * totalScenes);
+        const currentSceneGuide = sceneOutlineInfo
+          ? `현재 작성해야 할 씬: ${currentChapter.sceneOutline?.[currentSceneIdx] || '클라이맥스 또는 마무리'}`
+          : '';
+
+        const prompt = `당신은 한국의 베스트셀러 소설가입니다. 상업적으로 성공할 수준의 출판용 소설 원고를 작성합니다.
 
 [작품 정보]
 제목: ${currentProject.title}
 장르: ${currentProject.genre.join(', ')}
-시놉시스: ${currentProject.synopsis}
+분위기: ${currentProject.settings?.tone || '몰입감 있는'}
 
-[세계관]
-${worldInfo || '없음'}
+[시놉시스]
+${currentProject.synopsis}
 
-[등장인물]
-${characterInfo || '없음'}
+${currentProject.detailedSynopsis ? `[상세 시놉시스]\n${currentProject.detailedSynopsis}\n` : ''}
+[세계관 설정]
+${worldInfo || '현대 배경'}
 
-[현재 챕터]
-${currentChapter.number}장 - ${currentChapter.title}
+[등장인물 상세]
+${characterInfo || '주인공 중심 스토리'}
+
+[현재 챕터: ${currentChapter.number}장 - ${currentChapter.title}]
 목적: ${currentChapter.purpose || '스토리 전개'}
 주요 사건: ${currentChapter.keyEvents?.join(', ') || '없음'}
+감정톤: ${currentChapter.emotionalTone || '긴장과 기대'}
+${currentChapter.characters && currentChapter.characters.length > 0 ? `등장인물: ${currentChapter.characters.join(', ')}` : ''}
 
-[이전 내용]
-${content.slice(-800) || '(첫 장면입니다)'}
+${sceneOutlineInfo ? `[이 챕터의 씬 구성]\n${sceneOutlineInfo}\n\n${currentSceneGuide}` : ''}
 
-[분량]
-${currentProject.settings?.targetChapterLength || 10000}자
+[진행 상황]
+현재 ${currentLength.toLocaleString()}자 작성됨 (목표: ${targetLength.toLocaleString()}자, ${progress}% 완료)
+남은 분량: 약 ${remainingLength.toLocaleString()}자
 
-[출판용 원고 형식 - 반드시 준수]
+${isFirstGeneration ? `[지시사항 - 챕터 시작]
+이 챕터의 시작 부분을 작성하세요.
+- 독자를 단번에 사로잡는 강렬한 도입부
+- 장면 묘사로 시작하거나 인물의 행동으로 시작
+- 전 챕터와의 연결성 고려
+- 이 챕터의 핵심 갈등/사건을 암시` : `[이전 내용 - 반드시 이어서 작성]
+${recentContent}
 
-1. 들여쓰기: 모든 문단 첫 줄은 전각 공백(　) 하나로 시작
-2. 문단 구분: 문단 사이에 빈 줄 하나
-3. 대화문: 새 줄에서 전각 공백 후 큰따옴표로 시작
-4. 지문: 대화 뒤 지문은 같은 줄에 쓰거나 새 문단으로
-5. 장면 전환: 빈 줄 두 개로 구분
-6. 금지: *, #, -, =, _ 등 특수문자로 구분선이나 강조 절대 금지
+[지시사항 - 이어쓰기]
+위 내용 바로 다음부터 자연스럽게 이어서 작성하세요.
+- 앞 내용을 반복하거나 요약하지 마세요
+- 스토리를 계속 전개하세요
+- 인물 간 갈등과 감정을 깊이 있게 표현
+- 대화와 지문의 균형 유지
+- 복선과 암시 활용`}
 
-[예시 원고]
-　창밖으로 붉은 노을이 번져가고 있었다. 하늘은 마치 누군가 물감을 흩뿌린 것처럼 붉고 푸른 빛이 뒤섞여 있었다. 그녀는 창가에 서서 멍하니 그 풍경을 바라보았다.
+[분량 - 매우 중요!]
+이번에 최소 5000자 이상 작성하세요. 가능한 많이 작성하세요.
+절대 짧게 끊지 마세요. 장면을 충분히 전개하세요.
 
-　"뭘 그렇게 보고 있어?"
+[한국 소설책 형식 - 필수]
+- 문단 시작: 전각 공백(　)으로 들여쓰기
+- 대화문: "대사" 형식, 따옴표 안에 공백 없이
+- 지문: 대사 직후 같은 줄 또는 바로 다음 줄
+- 장면 전환시에만 빈 줄 하나 사용
+- 모든 문장은 마침표로 종료
+- **강조** 같은 마크다운 사용 금지
 
-　뒤에서 들려온 목소리에 그녀는 고개를 돌렸다. 문 앞에 그가 서 있었다. 손에는 김이 모락모락 나는 머그컵 두 개가 들려 있었다.
+[품질 체크리스트]
+✓ 생생한 오감 묘사 (시각, 청각, 촉각 등)
+✓ 인물의 내면 심리 묘사
+✓ 자연스러운 대화 (각 인물 말투 반영)
+✓ 장면 전환의 자연스러운 흐름
+✓ 긴장감과 몰입감 유지
 
-　"그냥, 노을이 예뻐서."
+본문만 출력하세요.`;
 
-　그녀는 미소를 지으며 대답했다. 그가 다가와 그녀 옆에 섰다. 두 사람은 나란히 서서 저물어가는 하늘을 바라보았다.
+        try {
+          const response = await generateText(settings.geminiApiKey, prompt, {
+            temperature: 0.85,
+            maxTokens: 8192,
+          });
 
+          const formattedResponse = formatNovelText(response);
 
-　밤이 되자 거리에는 가로등이 하나둘 켜지기 시작했다. 낮의 소란스러움은 사라지고, 고요한 정적만이 감돌았다.
-
-위 예시처럼 출판 소설 형식으로 이 챕터를 작성하세요. 본문만 출력하세요.`;
-
-      const targetLength = currentProject.settings?.targetChapterLength || 10000;
-      const response = await generateText(settings.geminiApiKey, prompt, {
-        temperature: 0.85,
-        maxTokens: Math.max(16000, targetLength * 2), // 목표 글자수의 2배 토큰 확보
-      });
-
-      // 텍스트 후처리 - 출판 형식으로 정리
-      const formatNovelText = (text: string): string => {
-        let formatted = text.trim();
-
-        // 특수문자 구분선 제거 (*, -, =, #, _ 등)
-        formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
-        formatted = formatted.replace(/^\*{3,}.*$/gm, '');
-        formatted = formatted.replace(/^-{3,}.*$/gm, '');
-        formatted = formatted.replace(/^={3,}.*$/gm, '');
-
-        // **강조** 또는 *강조* 제거
-        formatted = formatted.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
-
-        // 문장 단위로 분리하여 문단 만들기
-        // 마침표, 물음표, 느낌표, 따옴표 닫힘 뒤에서 분리
-        const sentences = formatted.split(/(?<=[.?!]["'"]?\s*)/);
-
-        const paragraphs: string[] = [];
-        let currentParagraph: string[] = [];
-
-        sentences.forEach((sentence, index) => {
-          const trimmed = sentence.trim();
-          if (!trimmed) return;
-
-          // 대화문 시작이면 새 문단
-          if (trimmed.startsWith('"') || trimmed.startsWith('"') || trimmed.startsWith('「')) {
-            if (currentParagraph.length > 0) {
-              paragraphs.push('　' + currentParagraph.join(' '));
-              currentParagraph = [];
-            }
-            paragraphs.push('　' + trimmed);
+          // 첫 생성이면 그대로, 아니면 이어붙이기
+          if (isFirstGeneration && currentText.trim().length === 0) {
+            currentText = formattedResponse;
+          } else {
+            currentText = currentText + '\n' + formattedResponse;
           }
-          // 대화문으로 끝나면 해당 문장까지 문단 완성
-          else if (trimmed.endsWith('"') || trimmed.endsWith('"') || trimmed.endsWith('」')) {
-            currentParagraph.push(trimmed);
-            paragraphs.push('　' + currentParagraph.join(' '));
-            currentParagraph = [];
-          }
-          // 3-4문장마다 문단 나누기
-          else {
-            currentParagraph.push(trimmed);
-            if (currentParagraph.length >= 3) {
-              paragraphs.push('　' + currentParagraph.join(' '));
-              currentParagraph = [];
-            }
-          }
-        });
 
-        // 남은 문장 처리
-        if (currentParagraph.length > 0) {
-          paragraphs.push('　' + currentParagraph.join(' '));
+          consecutiveErrors = 0; // 성공하면 에러 카운트 리셋
+
+          // 중간 저장 및 UI 업데이트 (5회마다 저장으로 최적화)
+          setContent(currentText);
+          if (currentScene && iteration % 3 === 0) {
+            await updateScene(currentScene.id, { content: currentText });
+            setLastSaved(new Date());
+          }
+
+          // API 호출 간격 (rate limit 방지) - 대용량이므로 1.5초
+          await new Promise(resolve => setTimeout(resolve, 1500));
+
+        } catch (apiError) {
+          consecutiveErrors++;
+          console.error(`[자동집필] API 오류 (${consecutiveErrors}회):`, apiError);
+
+          if (consecutiveErrors >= 3) {
+            throw new Error('연속 3회 API 오류 발생. 잠시 후 다시 시도해주세요.');
+          }
+
+          // 오류 시 더 긴 대기
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
+      }
 
-        // 빈 줄 하나로 문단 구분
-        return paragraphs.join('\n\n');
-      };
-
-      const formattedResponse = formatNovelText(response);
-      const newContent = content ? content + '\n\n' + formattedResponse : formattedResponse;
-      setContent(newContent);
-
-      // 자동 저장
+      // 최종 저장
       if (currentScene) {
-        await updateScene(currentScene.id, { content: newContent });
+        await updateScene(currentScene.id, { content: currentText });
         setLastSaved(new Date());
       }
 
+      const finalLength = currentText.length;
+      console.log(`[자동집필] 완료! 총 ${iteration}회 생성, 최종 ${finalLength.toLocaleString()}자 (공백 포함)`);
+      alert(`집필 완료! ${finalLength.toLocaleString()}자 생성됨`);
+
     } catch (error) {
       console.error('자동 집필 실패:', error);
-      alert('자동 집필 중 오류가 발생했습니다. 다시 시도해주세요.');
+      // 오류 발생해도 현재까지 작성된 내용은 저장
+      if (currentScene && currentText.length > 0) {
+        await updateScene(currentScene.id, { content: currentText });
+        setLastSaved(new Date());
+      }
+      alert(`자동 집필 중 오류가 발생했습니다. 현재까지 ${currentText.length.toLocaleString()}자 저장됨.`);
     } finally {
       setIsAutoWriting(false);
     }

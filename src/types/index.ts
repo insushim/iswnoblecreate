@@ -31,11 +31,14 @@ export interface ProjectSettings {
   perspective: 'first' | 'third-limited' | 'omniscient' | 'second';
   perspectiveCharacterId?: string;
   tense: 'past' | 'present';
+  tone?: string;
   dialogueRatio: number;
   descriptionDetail: number;
   pacingPreference: 'slow' | 'moderate' | 'fast';
   emotionIntensity: number;
+  targetChapterCount?: number;
   targetChapterLength: number;
+  targetSceneLength?: number;
   targetTotalLength?: number;
   language: 'ko' | 'en';
   autoSaveInterval: number;
@@ -152,6 +155,7 @@ export interface Character {
   skills?: string[];
   habits?: string[];
   quirks?: string[];
+  speechStyle?: string;
   speechPattern: SpeechPattern;
   arc: CharacterArc;
   relationships: Relationship[];
@@ -300,11 +304,14 @@ export interface Chapter {
   subtitle?: string;
   purpose: string;
   emotionalGoal?: string;
+  emotionalTone?: string;
   keyEvents: string[];
   povCharacterId?: string;
   location?: string;
   timeframe?: string;
   scenes: Scene[];
+  sceneOutline?: string[];
+  characters?: string[];
   status: 'outline' | 'draft' | 'revision' | 'polished' | 'approved';
   wordCount: number;
   targetWordCount?: number;

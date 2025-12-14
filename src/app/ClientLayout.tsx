@@ -16,7 +16,12 @@ export function ClientLayout({ children }: ClientLayoutProps) {
 
   // 앱 초기화
   useEffect(() => {
-    initSettings();
+    console.log('[ClientLayout] 앱 초기화 시작...');
+    initSettings().then(() => {
+      console.log('[ClientLayout] ✅ 설정 초기화 완료');
+    }).catch((error) => {
+      console.error('[ClientLayout] ❌ 설정 초기화 실패:', error);
+    });
   }, [initSettings]);
 
   return (

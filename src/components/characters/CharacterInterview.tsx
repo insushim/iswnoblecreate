@@ -48,8 +48,15 @@ export function CharacterInterview({ character, onClose }: CharacterInterviewPro
   }, [messages]);
 
   const handleSend = async (question?: string) => {
+    console.log('[CharacterInterview] handleSend 호출됨');
     const userQuestion = question || input;
-    if (!userQuestion.trim() || !settings?.geminiApiKey) return;
+    console.log('[CharacterInterview] 질문:', userQuestion);
+    console.log('[CharacterInterview] API 키 존재:', !!settings?.geminiApiKey);
+
+    if (!userQuestion.trim() || !settings?.geminiApiKey) {
+      console.error('[CharacterInterview] ❌ 질문 없음 또는 API 키 없음');
+      return;
+    }
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -105,7 +112,9 @@ ${userQuestion}
 
 답변만 출력해주세요 (따옴표나 캐릭터 이름 없이).`;
 
+      console.log('[CharacterInterview] generateText 호출 중...');
       const response = await generateText(settings.geminiApiKey, prompt, { temperature: 0.8 });
+      console.log('[CharacterInterview] ✅ 응답 수신, 길이:', response?.length || 0);
 
       const characterMessage: Message = {
         id: crypto.randomUUID(),
@@ -115,12 +124,17 @@ ${userQuestion}
       };
 
       setMessages((prev) => [...prev, characterMessage]);
-    } catch (error) {
-      console.error('인터뷰 응답 생성 실패:', error);
+    } catch (error: unknown) {
+      console.error('[CharacterInterview] ❌ 인터뷰 응답 생성 실패:');
+      console.error('[CharacterInterview] 오류 객체:', error);
+      if (error instanceof Error) {
+        console.error('[CharacterInterview] 오류 메시지:', error.message);
+        console.error('[CharacterInterview] 오류 스택:', error.stack);
+      }
       const errorMessage: Message = {
         id: crypto.randomUUID(),
         role: 'character',
-        content: '(응답을 생성하는 데 실패했습니다. 다시 시도해주세요.)',
+        content: error instanceof Error ? `(오류: ${error.message})` : '(응답을 생성하는 데 실패했습니다. 다시 시도해주세요.)',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
