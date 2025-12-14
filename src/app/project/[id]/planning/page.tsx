@@ -587,7 +587,7 @@ JSON 형식 (반드시 이 형식만 출력):
     }
   };
 
-  // 3단계: 캐릭터 생성
+  // 3단계: 캐릭터 생성 (한 명씩 순차 생성으로 파싱 오류 방지)
   const handleStep3_Characters = async () => {
     if (!settings?.geminiApiKey) {
       alert('API 키를 먼저 설정해주세요.');
@@ -596,97 +596,134 @@ JSON 형식 (반드시 이 형식만 출력):
 
     setIsAutoGenerating(true);
     setStepError(null);
-    setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 1, total: 1 });
 
     try {
       const config = getRecommendedConfig();
       const numCharacters = config.characters;
+      let createdCount = 0;
 
-      const characterPrompt = `당신은 캐릭터 디자인 전문가입니다.
-다음 소설 정보를 바탕으로 캐릭터 ${numCharacters}명을 JSON 배열로 생성해주세요.
+      // 캐릭터 역할 분배 계산
+      const roleDistribution: Array<{role: Character['role'], label: string}> = [];
+      roleDistribution.push({ role: 'protagonist', label: '주인공' });
+      roleDistribution.push({ role: 'antagonist', label: '적대자' });
 
-[필수 목표]
+      // 조연 수 계산 (전체의 약 40%)
+      const deuteragonistCount = Math.max(2, Math.floor(numCharacters * 0.3));
+      for (let i = 0; i < deuteragonistCount; i++) {
+        roleDistribution.push({ role: 'deuteragonist', label: `주요 조연 ${i + 1}` });
+      }
+
+      // 나머지는 보조 캐릭터
+      const supportingCount = numCharacters - roleDistribution.length;
+      for (let i = 0; i < supportingCount; i++) {
+        roleDistribution.push({ role: 'supporting', label: `보조 캐릭터 ${i + 1}` });
+      }
+
+      // 이미 생성된 캐릭터 목록 (중복 방지용)
+      const createdCharacters: Array<{name: string, role: string, description: string}> = [];
+
+      for (let i = 0; i < Math.min(numCharacters, roleDistribution.length); i++) {
+        const roleInfo = roleDistribution[i];
+        setAutoGenerateProgress({
+          step: `캐릭터 생성 중... (${i + 1}/${numCharacters}) - ${roleInfo.label}`,
+          current: i + 1,
+          total: numCharacters
+        });
+
+        const existingCharsContext = createdCharacters.length > 0
+          ? `\n\n[이미 생성된 캐릭터들 - 중복되지 않게 새로운 캐릭터 생성]\n${createdCharacters.map(c => `- ${c.name} (${c.role}): ${c.description}`).join('\n')}`
+          : '';
+
+        const characterPrompt = `당신은 캐릭터 디자인 전문가입니다.
+다음 소설의 "${roleInfo.label}" 캐릭터 1명을 JSON으로 생성해주세요.
+
+[소설 정보]
 - 제목: ${title}
 - 컨셉: ${concept}
-- 시놉시스: ${synopsis}
-- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자 (약 ${estimatedBooks}권)
-- 총 ${targetChapterCount}장의 소설
+- 시놉시스: ${synopsis.slice(0, 1000)}
+- 장르: ${selectedGenres.join(', ')}
+- 목표 분량: ${getLengthLabel()}${existingCharsContext}
 
-[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
-${calculatedTotalLength >= 1000000 ? `
-이것은 대작급 소설이므로 캐릭터가 충분히 많고 각각 깊이 있는 배경을 가져야 합니다.
-- 주인공 1명
-- 주요 조연 (동료/적대자) 5-8명
-- 보조 캐릭터 나머지
-각 캐릭터의 성격, 배경, 동기를 5문장 이상으로 상세하게 작성해주세요.` : ''}
+[요청]
+역할: ${roleInfo.role} (${roleInfo.label})
+${roleInfo.role === 'protagonist' ? '- 소설의 핵심 주인공입니다. 매력적이고 독자가 공감할 수 있는 캐릭터로.' : ''}
+${roleInfo.role === 'antagonist' ? '- 주인공과 대립하는 적대자입니다. 단순한 악역이 아닌 입체적인 동기를 가진.' : ''}
+${roleInfo.role === 'deuteragonist' ? '- 주인공의 동료/조력자 또는 중요 인물입니다.' : ''}
+${roleInfo.role === 'supporting' ? '- 스토리를 풍성하게 만드는 보조 캐릭터입니다.' : ''}
 
 JSON 형식 (반드시 이 형식만 출력):
-[
-  {
-    "name": "홍길동",
-    "role": "protagonist",
-    "age": "25",
-    "gender": "남성",
-    "occupation": "검객",
-    "personality": "성격 설명 3-5문장",
-    "background": "배경 스토리 3-5문장",
-    "motivation": "동기 1-2문장",
-    "goal": "목표",
-    "appearance": "외모 설명 2-3문장"
-  }
-]
+{
+  "name": "캐릭터 이름",
+  "role": "${roleInfo.role}",
+  "age": "나이",
+  "gender": "성별",
+  "occupation": "직업/신분",
+  "personality": "성격 설명 2-3문장",
+  "background": "배경 스토리 2-3문장",
+  "motivation": "동기 1문장",
+  "goal": "목표",
+  "appearance": "외모 설명 1-2문장"
+}`;
 
-role 값: protagonist, antagonist, deuteragonist, supporting, minor
+        try {
+          const charResult = await generateJSON<{
+            name: string;
+            role: Character['role'];
+            age: string;
+            gender: string;
+            occupation?: string;
+            personality: string;
+            background: string;
+            motivation: string;
+            goal: string;
+            appearance?: string;
+          }>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 1500 });
 
-${numCharacters}명의 캐릭터를 JSON 배열로만 출력하세요.`;
+          await createCharacter(projectId, {
+            name: charResult.name,
+            role: charResult.role,
+            age: charResult.age,
+            gender: charResult.gender,
+            occupation: charResult.occupation,
+            personality: charResult.personality,
+            background: charResult.background,
+            motivation: charResult.motivation,
+            goal: charResult.goal,
+            appearance: charResult.appearance,
+            strengths: [],
+            weaknesses: [],
+            relationships: [],
+            emotionalState: [],
+            speechPattern: {
+              formalityLevel: 3,
+              speechSpeed: 'normal',
+              vocabularyLevel: 'average',
+              tone: '',
+            },
+            arc: {
+              type: charResult.role === 'protagonist' ? 'positive' : (charResult.role === 'antagonist' ? 'negative' : 'flat'),
+              startingState: '',
+              endingState: '',
+              keyMoments: [],
+            },
+          });
 
-      const characterResult = await generateJSON<Array<{
-        name: string;
-        role: Character['role'];
-        age: string;
-        gender: string;
-        occupation?: string;
-        personality: string;
-        background: string;
-        motivation: string;
-        goal: string;
-        appearance?: string;
-      }>>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 6000 });
-
-      for (const char of characterResult) {
-        await createCharacter(projectId, {
-          name: char.name,
-          role: char.role,
-          age: char.age,
-          gender: char.gender,
-          occupation: char.occupation,
-          personality: char.personality,
-          background: char.background,
-          motivation: char.motivation,
-          goal: char.goal,
-          appearance: char.appearance,
-          strengths: [],
-          weaknesses: [],
-          relationships: [],
-          emotionalState: [],
-          speechPattern: {
-            formalityLevel: 3,
-            speechSpeed: 'normal',
-            vocabularyLevel: 'average',
-            tone: '',
-          },
-          arc: {
-            type: char.role === 'protagonist' ? 'positive' : (char.role === 'antagonist' ? 'negative' : 'flat'),
-            startingState: '',
-            endingState: '',
-            keyMoments: [],
-          },
-        });
+          // 생성된 캐릭터 목록에 추가
+          createdCharacters.push({
+            name: charResult.name,
+            role: roleInfo.label,
+            description: charResult.personality.slice(0, 50)
+          });
+          createdCount++;
+        } catch (err) {
+          console.error(`캐릭터 ${roleInfo.label} 생성 실패:`, err);
+          // 개별 실패해도 계속 진행
+        }
       }
 
       setGenerationStep(3);
       if (!isFullAutoMode) {
-        alert(`3단계 완료! 캐릭터 ${characterResult.length}명이 생성되었습니다.`);
+        alert(`3단계 완료! 캐릭터 ${createdCount}명이 생성되었습니다.`);
       }
     } catch (error: unknown) {
       console.error('3단계 실패:', error);
@@ -700,7 +737,7 @@ ${numCharacters}명의 캐릭터를 JSON 배열로만 출력하세요.`;
     }
   };
 
-  // 4단계: 플롯 생성
+  // 4단계: 플롯 생성 (개별 플롯 포인트 순차 생성)
   const handleStep4_Plot = async () => {
     if (!settings?.geminiApiKey) {
       alert('API 키를 먼저 설정해주세요.');
@@ -709,58 +746,100 @@ ${numCharacters}명의 캐릭터를 JSON 배열로만 출력하세요.`;
 
     setIsAutoGenerating(true);
     setStepError(null);
-    setAutoGenerateProgress({ step: '플롯 구조 생성 중...', current: 1, total: 1 });
 
     try {
       await fetchPlotStructure(projectId);
       const config = getRecommendedConfig();
       const plotCount = config.plotPoints;
+      let createdCount = 0;
 
-      const plotPrompt = `당신은 스토리 구조 전문가입니다.
-다음 소설 정보를 바탕으로 플롯 포인트 ${plotCount}개를 JSON 배열로 생성해주세요.
+      // 플롯 포인트 타입 분배 (기승전결 구조)
+      const plotTypes: Array<{type: PlotPoint['type'], label: string, description: string}> = [
+        { type: 'opening', label: '도입', description: '세계관과 주인공 소개, 일상의 모습' },
+        { type: 'inciting-incident', label: '촉발 사건', description: '주인공의 일상을 뒤흔드는 사건' },
+        { type: 'first-plot-point', label: '첫 번째 전환점', description: '모험/갈등의 시작, 목표 설정' },
+        { type: 'rising-action', label: '상승 액션 1', description: '초기 도전과 성장, 동료 획득' },
+        { type: 'rising-action', label: '상승 액션 2', description: '더 큰 도전, 적의 등장' },
+        { type: 'midpoint', label: '중간 반전', description: '스토리 방향이 바뀌는 중요한 순간' },
+        { type: 'rising-action', label: '상승 액션 3', description: '위기 심화, 내면 갈등' },
+        { type: 'second-plot-point', label: '두 번째 전환점', description: '암흑의 순간, 최대 위기' },
+        { type: 'climax', label: '클라이맥스', description: '최종 대결, 모든 갈등의 정점' },
+        { type: 'resolution', label: '결말', description: '갈등 해결, 새로운 일상' },
+      ];
 
-[필수 목표]
+      // 대작의 경우 플롯 포인트 추가
+      if (plotCount > 10) {
+        const additionalCount = plotCount - 10;
+        for (let i = 0; i < additionalCount; i++) {
+          plotTypes.splice(5 + i, 0, {
+            type: 'rising-action',
+            label: `서브플롯 ${i + 1}`,
+            description: '메인 스토리와 연결된 부가 사건'
+          });
+        }
+      }
+
+      const createdPlots: Array<{title: string, type: string}> = [];
+
+      for (let i = 0; i < Math.min(plotCount, plotTypes.length); i++) {
+        const plotType = plotTypes[i];
+        setAutoGenerateProgress({
+          step: `플롯 생성 중... (${i + 1}/${plotCount}) - ${plotType.label}`,
+          current: i + 1,
+          total: plotCount
+        });
+
+        const existingPlotsContext = createdPlots.length > 0
+          ? `\n\n[이전 플롯 포인트들 - 연속성 있게 이어지도록]\n${createdPlots.map((p, idx) => `${idx + 1}. ${p.title} (${p.type})`).join('\n')}`
+          : '';
+
+        const plotPrompt = `당신은 스토리 구조 전문가입니다.
+다음 소설의 "${plotType.label}" 플롯 포인트를 JSON으로 생성해주세요.
+
+[소설 정보]
 - 제목: ${title}
-- 시놉시스: ${synopsis}
-- 상세 시놉시스: ${detailedSynopsis.slice(0, 3000)}
-- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자 (약 ${estimatedBooks}권)
-- 총 ${targetChapterCount}장의 소설
+- 시놉시스: ${synopsis.slice(0, 800)}
+- 장르: ${selectedGenres.join(', ')}
+- 목표 분량: ${getLengthLabel()}${existingPlotsContext}
 
-[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
-${calculatedTotalLength >= 1000000 ? `
-이것은 대작급 소설이므로 플롯 포인트가 더 많고 복잡해야 합니다.
-- 메인 플롯 외에 서브플롯도 포함
-- 각 플롯 포인트는 3-5문장으로 상세하게 설명
-- 전체 ${targetChapterCount}장에 걸쳐 균형있게 배치` : '각 플롯 포인트를 2-3문장으로 설명해주세요.'}
+[요청]
+플롯 타입: ${plotType.type} (${plotType.label})
+이 플롯의 역할: ${plotType.description}
+순서: ${i + 1}번째 플롯 포인트
 
 JSON 형식 (반드시 이 형식만 출력):
-[
-  {"title": "도입", "description": "설명", "type": "opening", "order": 1},
-  {"title": "촉발 사건", "description": "설명", "type": "inciting-incident", "order": 2}
-]
+{
+  "title": "플롯 포인트 제목",
+  "description": "이 플롯에서 일어나는 사건 2-3문장",
+  "type": "${plotType.type}",
+  "order": ${i + 1}
+}`;
 
-type 값: opening, inciting-incident, first-plot-point, rising-action, midpoint, second-plot-point, climax, resolution
+        try {
+          const plotResult = await generateJSON<{
+            title: string;
+            description: string;
+            type: PlotPoint['type'];
+            order: number;
+          }>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 1000 });
 
-${plotCount}개 플롯 포인트를 JSON 배열로만 출력하세요.`;
+          await addPlotPoint({
+            ...plotResult,
+            stage: '',
+            completed: false,
+          });
 
-      const plotResult = await generateJSON<Array<{
-        title: string;
-        description: string;
-        type: PlotPoint['type'];
-        order: number;
-      }>>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 4096 });
-
-      for (const plot of plotResult) {
-        await addPlotPoint({
-          ...plot,
-          stage: '',
-          completed: false,
-        });
+          createdPlots.push({ title: plotResult.title, type: plotType.label });
+          createdCount++;
+        } catch (err) {
+          console.error(`플롯 ${plotType.label} 생성 실패:`, err);
+          // 개별 실패해도 계속 진행
+        }
       }
 
       setGenerationStep(4);
       if (!isFullAutoMode) {
-        alert(`4단계 완료! 플롯 포인트 ${plotResult.length}개가 생성되었습니다.`);
+        alert(`4단계 완료! 플롯 포인트 ${createdCount}개가 생성되었습니다.`);
       }
     } catch (error: unknown) {
       console.error('4단계 실패:', error);
@@ -774,7 +853,7 @@ ${plotCount}개 플롯 포인트를 JSON 배열로만 출력하세요.`;
     }
   };
 
-  // 5단계: 챕터 생성
+  // 5단계: 챕터 생성 (개별 챕터 순차 생성)
   const handleStep5_Chapters = async () => {
     if (!settings?.geminiApiKey) {
       alert('API 키를 먼저 설정해주세요.');
@@ -783,67 +862,103 @@ ${plotCount}개 플롯 포인트를 JSON 배열로만 출력하세요.`;
 
     setIsAutoGenerating(true);
     setStepError(null);
-    setAutoGenerateProgress({ step: '챕터 구조 생성 중...', current: 1, total: 1 });
 
     try {
-      const config = getRecommendedConfig();
+      let createdCount = 0;
 
-      const chapterPrompt = `당신은 소설 구성 전문가입니다.
-다음 소설 정보를 바탕으로 ${targetChapterCount}개 챕터를 JSON 배열로 생성해주세요.
+      // 기승전결 구간 계산
+      const actBreaks = {
+        act1End: Math.floor(targetChapterCount * 0.2),     // 기(起) 끝
+        act2End: Math.floor(targetChapterCount * 0.5),     // 승(承) 끝
+        act3End: Math.floor(targetChapterCount * 0.8),     // 전(轉) 끝
+      };
 
-[필수 목표]
-- 시놉시스: ${synopsis}
-- 상세 시놉시스: ${detailedSynopsis.slice(0, 4000)}
-- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자
-- 구성: ${targetChapterCount}장 × ${targetChapterLength.toLocaleString()}자/장 × ${config.scenesPerChapter}씬/장
-- 이 분량은 출판 소설 약 ${estimatedBooks}권에 해당합니다.
+      const getActInfo = (chapterNum: number): {act: string, actLabel: string, purpose: string} => {
+        if (chapterNum <= actBreaks.act1End) {
+          return { act: '1부', actLabel: '기(起) 도입부', purpose: '세계관 소개, 주인공 일상, 촉발 사건' };
+        } else if (chapterNum <= actBreaks.act2End) {
+          return { act: '2부', actLabel: '승(承) 전개부', purpose: '모험 시작, 동료 만남, 1차 시련' };
+        } else if (chapterNum <= actBreaks.act3End) {
+          return { act: '3부', actLabel: '전(轉) 위기부', purpose: '진짜 적 등장, 2차 시련, 암흑의 순간' };
+        } else {
+          return { act: '4부', actLabel: '결(結) 결말부', purpose: '최종 대결, 갈등 해결, 에필로그' };
+        }
+      };
 
-[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
-각 챕터는 ${targetChapterLength.toLocaleString()}자를 채울 수 있도록 충분한 내용이 있어야 합니다.
-${calculatedTotalLength >= 1000000 ? `
-이것은 대작급 소설이므로:
-- 각 챕터는 ${config.scenesPerChapter}개 이상의 씬으로 구성
-- 챕터별 목적과 주요 사건을 상세하게 기술
-- 전체 스토리 아크를 균형있게 배분` : ''}
+      const createdChapters: Array<{number: number, title: string, summary: string}> = [];
 
-[챕터 배분 가이드]
-- 1부 기(起) 도입: 1~${Math.floor(targetChapterCount * 0.2)}장
-- 2부 승(承) 전개: ${Math.floor(targetChapterCount * 0.2) + 1}~${Math.floor(targetChapterCount * 0.5)}장
-- 3부 전(轉) 위기: ${Math.floor(targetChapterCount * 0.5) + 1}~${Math.floor(targetChapterCount * 0.8)}장
-- 4부 결(結) 결말: ${Math.floor(targetChapterCount * 0.8) + 1}~${targetChapterCount}장
+      for (let i = 1; i <= targetChapterCount; i++) {
+        const actInfo = getActInfo(i);
+        setAutoGenerateProgress({
+          step: `챕터 생성 중... (${i}/${targetChapterCount}) - ${actInfo.act} ${actInfo.actLabel}`,
+          current: i,
+          total: targetChapterCount
+        });
+
+        // 최근 3개 챕터만 컨텍스트로 사용 (토큰 절약)
+        const recentChapters = createdChapters.slice(-3);
+        const existingChaptersContext = recentChapters.length > 0
+          ? `\n\n[직전 챕터들 - 연속성 있게 이어지도록]\n${recentChapters.map(c => `${c.number}장 "${c.title}": ${c.summary}`).join('\n')}`
+          : '';
+
+        const chapterPrompt = `당신은 소설 구성 전문가입니다.
+다음 소설의 ${i}장을 JSON으로 생성해주세요.
+
+[소설 정보]
+- 제목: ${title}
+- 시놉시스: ${synopsis.slice(0, 600)}
+- 장르: ${selectedGenres.join(', ')}
+- 총 ${targetChapterCount}장 중 ${i}장째
+- 챕터당 목표: ${targetChapterLength.toLocaleString()}자${existingChaptersContext}
+
+[현재 위치]
+${actInfo.act} ${actInfo.actLabel} (${i}/${targetChapterCount}장)
+이 구간의 역할: ${actInfo.purpose}
+
+[요청]
+${i}장의 제목, 목적, 주요 사건을 생성해주세요.
+- purpose: 이 챕터가 전체 스토리에서 하는 역할 (2문장)
+- keyEvents: 이 챕터에서 일어나는 3-5개의 구체적 사건
 
 JSON 형식 (반드시 이 형식만 출력):
-[
-  {
-    "number": 1,
-    "title": "챕터 제목",
-    "purpose": "이 챕터의 목적 2-3문장",
-    "keyEvents": ["사건1 상세설명", "사건2 상세설명", "사건3 상세설명", "사건4", "사건5"]
-  }
-]
+{
+  "number": ${i},
+  "title": "챕터 제목",
+  "purpose": "이 챕터의 목적 2문장",
+  "keyEvents": ["사건1", "사건2", "사건3"]
+}`;
 
-${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
+        try {
+          const chapterResult = await generateJSON<{
+            number: number;
+            title: string;
+            purpose: string;
+            keyEvents: string[];
+          }>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 1200 });
 
-      const chapterResult = await generateJSON<Array<{
-        number: number;
-        title: string;
-        purpose: string;
-        keyEvents: string[];
-      }>>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 8192 });
+          await createChapter(projectId, {
+            number: chapterResult.number,
+            title: chapterResult.title,
+            purpose: chapterResult.purpose,
+            keyEvents: chapterResult.keyEvents,
+            status: 'outline',
+          });
 
-      for (const chapter of chapterResult) {
-        await createChapter(projectId, {
-          number: chapter.number,
-          title: chapter.title,
-          purpose: chapter.purpose,
-          keyEvents: chapter.keyEvents,
-          status: 'outline',
-        });
+          createdChapters.push({
+            number: i,
+            title: chapterResult.title,
+            summary: chapterResult.purpose.slice(0, 50)
+          });
+          createdCount++;
+        } catch (err) {
+          console.error(`${i}장 생성 실패:`, err);
+          // 개별 실패해도 계속 진행
+        }
       }
 
       setGenerationStep(5);
       if (!isFullAutoMode) {
-        alert(`5단계 완료! 챕터 ${chapterResult.length}개가 생성되었습니다.\n\n모든 기획이 완료되었습니다!`);
+        alert(`5단계 완료! 챕터 ${createdCount}개가 생성되었습니다.\n\n모든 기획이 완료되었습니다!`);
       }
     } catch (error: unknown) {
       console.error('5단계 실패:', error);

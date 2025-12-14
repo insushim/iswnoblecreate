@@ -246,7 +246,7 @@ export interface PlotPoint {
   id: string;
   title: string;
   description: string;
-  type: 'opening' | 'inciting-incident' | 'first-plot-point' | 'midpoint' | 'second-plot-point' | 'climax' | 'resolution' | 'custom';
+  type: 'opening' | 'inciting-incident' | 'first-plot-point' | 'rising-action' | 'midpoint' | 'second-plot-point' | 'climax' | 'resolution' | 'custom';
   stage: string;
   chapterId?: string;
   sceneId?: string;
