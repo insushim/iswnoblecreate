@@ -287,12 +287,35 @@ export default function PlanningPage() {
   };
 
   // 단계별 생성 함수들
-  // 분량 라벨 생성
+  // 분량 라벨 생성 (새로운 기준: 단편 20만+, 중편 60만+, 장편 100만+, 대작 200만+, 시리즈 400만+)
   const getLengthLabel = () => {
-    if (calculatedTotalLength <= 50000) return '단편';
-    if (calculatedTotalLength <= 100000) return '중편';
-    if (calculatedTotalLength <= 200000) return '장편 (1권)';
-    return `장편 (약 ${estimatedBooks}권)`;
+    if (calculatedTotalLength < 200000) return `습작 (${Math.floor(calculatedTotalLength / 10000)}만자)`;
+    if (calculatedTotalLength < 600000) return `단편 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
+    if (calculatedTotalLength < 1000000) return `중편 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
+    if (calculatedTotalLength < 2000000) return `장편 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
+    if (calculatedTotalLength < 4000000) return `대작 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
+    return `시리즈급 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
+  };
+
+  // 분량에 따른 권장 구성 정보
+  const getRecommendedConfig = () => {
+    if (calculatedTotalLength < 200000) {
+      return { chapters: 5, characters: 5, worldSettings: 4, plotPoints: 5, scenesPerChapter: 3 };
+    }
+    if (calculatedTotalLength < 600000) { // 단편 20만~60만
+      return { chapters: 10, characters: 8, worldSettings: 6, plotPoints: 8, scenesPerChapter: 5 };
+    }
+    if (calculatedTotalLength < 1000000) { // 중편 60만~100만
+      return { chapters: 20, characters: 12, worldSettings: 8, plotPoints: 10, scenesPerChapter: 6 };
+    }
+    if (calculatedTotalLength < 2000000) { // 장편 100만~200만
+      return { chapters: 30, characters: 15, worldSettings: 10, plotPoints: 12, scenesPerChapter: 8 };
+    }
+    if (calculatedTotalLength < 4000000) { // 대작 200만~400만
+      return { chapters: 50, characters: 20, worldSettings: 12, plotPoints: 15, scenesPerChapter: 10 };
+    }
+    // 시리즈급 400만 이상
+    return { chapters: 100, characters: 25, worldSettings: 15, plotPoints: 20, scenesPerChapter: 12 };
   };
 
   // 1단계: 로그라인 + 시놉시스 생성
@@ -307,13 +330,21 @@ export default function PlanningPage() {
     setAutoGenerateProgress({ step: '로그라인 생성 중...', current: 1, total: 3 });
 
     try {
+      const config = getRecommendedConfig();
+
       // 로그라인 생성
       const loglinePrompt = `당신은 베스트셀러 작가이자 스토리 컨설턴트입니다.
 다음 소설 컨셉을 바탕으로 독자를 사로잡는 로그라인을 작성해주세요.
 
-컨셉: ${concept}
-장르: ${selectedGenres.join(', ') || '판타지, 액션'}
-목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장)
+[필수 목표]
+- 컨셉: ${concept}
+- 장르: ${selectedGenres.join(', ') || '판타지, 액션'}
+- 목표 분량: ${getLengthLabel()}
+- 총 글자수: ${calculatedTotalLength.toLocaleString()}자 (반드시 이 분량을 채울 수 있는 스케일의 이야기)
+- 총 ${targetChapterCount}장, 챕터당 ${targetChapterLength.toLocaleString()}자
+
+[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
+${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks + '권 분량의 대작입니다. 그에 걸맞은 웅장하고 복잡한 서사가 필요합니다.' : ''}
 
 로그라인 작성 공식:
 [주인공]이/가 [상황/세계]에서 [목표]를 위해 [장애물/적대자]와 맞서 싸우며 [위험/대가]를 감수해야 한다.
@@ -325,41 +356,76 @@ export default function PlanningPage() {
       // 시놉시스 생성
       setAutoGenerateProgress({ step: '시놉시스 생성 중...', current: 2, total: 3 });
       const synopsisPrompt = `당신은 베스트셀러 작가입니다.
-다음 정보를 바탕으로 출판사 제출용 시놉시스를 작성해주세요.
+다음 정보를 바탕으로 ${calculatedTotalLength.toLocaleString()}자 분량의 소설을 위한 출판사 제출용 시놉시스를 작성해주세요.
 
-컨셉: ${concept}
-로그라인: ${newLogline}
-장르: ${selectedGenres.join(', ') || '판타지, 액션'}
-목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장)
+[필수 목표]
+- 컨셉: ${concept}
+- 로그라인: ${newLogline}
+- 장르: ${selectedGenres.join(', ') || '판타지, 액션'}
+- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자
+- 구성: ${targetChapterCount}장 × ${targetChapterLength.toLocaleString()}자/장
+- 예상 등장인물: ${config.characters}명
+- 예상 플롯 포인트: ${config.plotPoints}개
 
-시놉시스 필수 포함 사항 (2000자 내외):
-1. 도입부 - 세계관 배경, 주인공 소개
-2. 갈등 발생 - 촉발 사건, 목표 설정
-3. 전개 - 시련과 성장, 조력자/적대자
-4. 클라이맥스 - 최대 위기, 결전
-5. 결말 - 갈등 해결, 변화
+[중요] 이 소설은 ${estimatedBooks}권 분량입니다. 시놉시스는 이 분량을 충분히 채울 수 있는 복잡하고 깊이 있는 스토리를 담아야 합니다.
+
+시놉시스 필수 포함 사항 (3000자 내외):
+1. 세계관 배경 - ${calculatedTotalLength >= 1000000 ? '광대하고 정교한 세계관 설정' : '핵심 배경 설명'}
+2. 주인공 소개 - 캐릭터의 시작점, 내면의 결함
+3. 촉발 사건 - 모험/갈등의 시작
+4. 1차 시련 - 초기 도전과 성장
+5. 중반 반전 - 스토리의 전환점
+6. 2차 시련 - 더 큰 위기
+7. 암흑의 순간 - 최대 위기, 모든 것을 잃음
+8. 클라이맥스 - 최종 대결
+9. 결말 - 변화와 성장, 새로운 일상
 
 시놉시스만 출력하세요. 번호 없이 자연스러운 문장으로.`;
-      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, { temperature: 0.7, maxTokens: 4096 });
+      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, { temperature: 0.7, maxTokens: 6000 });
       setSynopsis(newSynopsis.trim());
 
       // 상세 시놉시스 생성
       setAutoGenerateProgress({ step: '상세 시놉시스 생성 중...', current: 3, total: 3 });
       const detailedPrompt = `당신은 베스트셀러 작가입니다.
-다음 시놉시스를 바탕으로 상세 기획서를 작성해주세요.
+다음 시놉시스를 바탕으로 ${calculatedTotalLength.toLocaleString()}자 분량 소설의 상세 기획서를 작성해주세요.
 
-시놉시스: ${newSynopsis}
-장르: ${selectedGenres.join(', ')}
-목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장, 챕터당 ${targetChapterLength.toLocaleString()}자)
+[필수 목표]
+- 시놉시스: ${newSynopsis}
+- 장르: ${selectedGenres.join(', ')}
+- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자
+- 구성: ${targetChapterCount}장 × ${targetChapterLength.toLocaleString()}자/장 × ${config.scenesPerChapter}씬/장
+- 이 분량은 출판 소설 약 ${estimatedBooks}권에 해당합니다.
 
-상세 시놉시스 (5000자 내외):
-- 1부 기(起): 도입부 상세
-- 2부 승(承): 전개부 상세
-- 3부 전(轉): 위기부 상세
-- 4부 결(結): 결말부 상세
+[중요] 상세 시놉시스는 ${targetChapterCount}장의 모든 내용을 충분히 채울 수 있도록
+각 부분별로 구체적인 사건, 갈등, 캐릭터 변화를 포함해야 합니다.
 
-각 부분을 상세하게 서술해주세요.`;
-      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7, maxTokens: 8192 });
+상세 시놉시스 (${Math.min(8000, calculatedTotalLength / 100)}자 내외):
+
+1부 기(起) - 도입부 (${Math.floor(targetChapterCount * 0.2)}장 분량):
+- 세계관과 일상
+- 주인공 소개와 내면의 결함
+- 촉발 사건과 모험의 시작
+
+2부 승(承) - 전개부 (${Math.floor(targetChapterCount * 0.3)}장 분량):
+- 새로운 세계/상황 적응
+- 동료들과의 만남
+- 1차 시련과 성장
+- 중간 반전점
+
+3부 전(轉) - 위기부 (${Math.floor(targetChapterCount * 0.3)}장 분량):
+- 진정한 적의 등장
+- 2차 시련과 패배
+- 암흑의 순간 (최악의 위기)
+- 재기를 위한 결심
+
+4부 결(結) - 결말부 (${Math.floor(targetChapterCount * 0.2)}장 분량):
+- 최종 대결 준비
+- 클라이맥스 전투/대면
+- 갈등 해결
+- 에필로그와 새로운 일상
+
+각 부분을 상세하게 서술해주세요. 이 기획서를 바탕으로 ${calculatedTotalLength.toLocaleString()}자의 소설이 집필됩니다.`;
+      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7, maxTokens: 16000 });
       setDetailedSynopsis(newDetailed.trim());
 
       // 저장
@@ -417,24 +483,33 @@ export default function PlanningPage() {
     setAutoGenerateProgress({ step: '세계관 생성 중...', current: 1, total: 1 });
 
     try {
-      const worldPrompt = `당신은 세계관 전문가입니다.
-다음 소설 정보를 바탕으로 세계관 설정 8개를 JSON 배열로 생성해주세요.
+      const config = getRecommendedConfig();
+      const worldCount = config.worldSettings;
 
-제목: ${title}
-컨셉: ${concept}
-시놉시스: ${synopsis}
-장르: ${selectedGenres.join(', ')}
+      const worldPrompt = `당신은 세계관 전문가입니다.
+다음 소설 정보를 바탕으로 세계관 설정 ${worldCount}개를 JSON 배열로 생성해주세요.
+
+[필수 목표]
+- 제목: ${title}
+- 컨셉: ${concept}
+- 시놉시스: ${synopsis}
+- 장르: ${selectedGenres.join(', ')}
+- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자 (약 ${estimatedBooks}권)
+- 총 ${targetChapterCount}장의 소설
+
+[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
+${calculatedTotalLength >= 1000000 ? '이것은 대작급 소설이므로 세계관이 매우 정교하고 광대해야 합니다. 각 설정은 최소 200자 이상으로 상세하게 작성해주세요.' : '각 설정은 최소 100자 이상으로 작성해주세요.'}
 
 JSON 형식 (반드시 이 형식만 출력):
 [
-  {"category": "time", "title": "시대 배경", "description": "설명 100자 이상", "importance": "core"},
-  {"category": "space", "title": "지리/공간", "description": "설명 100자 이상", "importance": "core"}
+  {"category": "time", "title": "시대 배경", "description": "상세 설명", "importance": "core"},
+  {"category": "space", "title": "지리/공간", "description": "상세 설명", "importance": "core"}
 ]
 
 category 값: time, space, society, magic, technology, history, culture, politics, economy, religion, custom
 importance 값: core, major, minor
 
-8개 항목을 JSON 배열로만 출력하세요.`;
+${worldCount}개 항목을 JSON 배열로만 출력하세요.`;
 
       const worldResult = await generateJSON<Array<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>>(
         settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
@@ -472,15 +547,26 @@ importance 값: core, major, minor
     setAutoGenerateProgress({ step: '캐릭터 생성 중...', current: 1, total: 1 });
 
     try {
-      // 분량에 따른 캐릭터 수 계산 (최대 15명)
-      const numCharacters = Math.min(Math.max(Math.ceil(calculatedTotalLength / 100000) * 5, 5), 15);
+      const config = getRecommendedConfig();
+      const numCharacters = config.characters;
 
       const characterPrompt = `당신은 캐릭터 디자인 전문가입니다.
 다음 소설 정보를 바탕으로 캐릭터 ${numCharacters}명을 JSON 배열로 생성해주세요.
 
-제목: ${title}
-컨셉: ${concept}
-시놉시스: ${synopsis}
+[필수 목표]
+- 제목: ${title}
+- 컨셉: ${concept}
+- 시놉시스: ${synopsis}
+- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자 (약 ${estimatedBooks}권)
+- 총 ${targetChapterCount}장의 소설
+
+[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
+${calculatedTotalLength >= 1000000 ? `
+이것은 대작급 소설이므로 캐릭터가 충분히 많고 각각 깊이 있는 배경을 가져야 합니다.
+- 주인공 1명
+- 주요 조연 (동료/적대자) 5-8명
+- 보조 캐릭터 나머지
+각 캐릭터의 성격, 배경, 동기를 5문장 이상으로 상세하게 작성해주세요.` : ''}
 
 JSON 형식 (반드시 이 형식만 출력):
 [
@@ -575,23 +661,35 @@ ${numCharacters}명의 캐릭터를 JSON 배열로만 출력하세요.`;
 
     try {
       await fetchPlotStructure(projectId);
+      const config = getRecommendedConfig();
+      const plotCount = config.plotPoints;
 
       const plotPrompt = `당신은 스토리 구조 전문가입니다.
-다음 소설 정보를 바탕으로 플롯 포인트 8개를 JSON 배열로 생성해주세요.
+다음 소설 정보를 바탕으로 플롯 포인트 ${plotCount}개를 JSON 배열로 생성해주세요.
 
-제목: ${title}
-시놉시스: ${synopsis}
-상세 시놉시스: ${detailedSynopsis.slice(0, 1500)}
+[필수 목표]
+- 제목: ${title}
+- 시놉시스: ${synopsis}
+- 상세 시놉시스: ${detailedSynopsis.slice(0, 3000)}
+- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자 (약 ${estimatedBooks}권)
+- 총 ${targetChapterCount}장의 소설
+
+[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
+${calculatedTotalLength >= 1000000 ? `
+이것은 대작급 소설이므로 플롯 포인트가 더 많고 복잡해야 합니다.
+- 메인 플롯 외에 서브플롯도 포함
+- 각 플롯 포인트는 3-5문장으로 상세하게 설명
+- 전체 ${targetChapterCount}장에 걸쳐 균형있게 배치` : '각 플롯 포인트를 2-3문장으로 설명해주세요.'}
 
 JSON 형식 (반드시 이 형식만 출력):
 [
-  {"title": "도입", "description": "설명 2-3문장", "type": "opening", "order": 1},
-  {"title": "촉발 사건", "description": "설명 2-3문장", "type": "inciting-incident", "order": 2}
+  {"title": "도입", "description": "설명", "type": "opening", "order": 1},
+  {"title": "촉발 사건", "description": "설명", "type": "inciting-incident", "order": 2}
 ]
 
 type 값: opening, inciting-incident, first-plot-point, rising-action, midpoint, second-plot-point, climax, resolution
 
-8개 플롯 포인트를 JSON 배열로만 출력하세요.`;
+${plotCount}개 플롯 포인트를 JSON 배열로만 출력하세요.`;
 
       const plotResult = await generateJSON<Array<{
         title: string;
@@ -636,20 +734,39 @@ type 값: opening, inciting-incident, first-plot-point, rising-action, midpoint,
     setAutoGenerateProgress({ step: '챕터 구조 생성 중...', current: 1, total: 1 });
 
     try {
+      const config = getRecommendedConfig();
+
       const chapterPrompt = `당신은 소설 구성 전문가입니다.
 다음 소설 정보를 바탕으로 ${targetChapterCount}개 챕터를 JSON 배열로 생성해주세요.
 
-시놉시스: ${synopsis}
-상세 시놉시스: ${detailedSynopsis.slice(0, 2000)}
-목표 분량: ${getLengthLabel()} (총 ${calculatedTotalLength.toLocaleString()}자, ${targetChapterCount}장, 챕터당 ${targetChapterLength.toLocaleString()}자)
+[필수 목표]
+- 시놉시스: ${synopsis}
+- 상세 시놉시스: ${detailedSynopsis.slice(0, 4000)}
+- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자
+- 구성: ${targetChapterCount}장 × ${targetChapterLength.toLocaleString()}자/장 × ${config.scenesPerChapter}씬/장
+- 이 분량은 출판 소설 약 ${estimatedBooks}권에 해당합니다.
+
+[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
+각 챕터는 ${targetChapterLength.toLocaleString()}자를 채울 수 있도록 충분한 내용이 있어야 합니다.
+${calculatedTotalLength >= 1000000 ? `
+이것은 대작급 소설이므로:
+- 각 챕터는 ${config.scenesPerChapter}개 이상의 씬으로 구성
+- 챕터별 목적과 주요 사건을 상세하게 기술
+- 전체 스토리 아크를 균형있게 배분` : ''}
+
+[챕터 배분 가이드]
+- 1부 기(起) 도입: 1~${Math.floor(targetChapterCount * 0.2)}장
+- 2부 승(承) 전개: ${Math.floor(targetChapterCount * 0.2) + 1}~${Math.floor(targetChapterCount * 0.5)}장
+- 3부 전(轉) 위기: ${Math.floor(targetChapterCount * 0.5) + 1}~${Math.floor(targetChapterCount * 0.8)}장
+- 4부 결(結) 결말: ${Math.floor(targetChapterCount * 0.8) + 1}~${targetChapterCount}장
 
 JSON 형식 (반드시 이 형식만 출력):
 [
   {
     "number": 1,
     "title": "챕터 제목",
-    "purpose": "이 챕터의 목적 1-2문장",
-    "keyEvents": ["사건1", "사건2", "사건3"]
+    "purpose": "이 챕터의 목적 2-3문장",
+    "keyEvents": ["사건1 상세설명", "사건2 상세설명", "사건3 상세설명", "사건4", "사건5"]
   }
 ]
 
@@ -859,7 +976,7 @@ ${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                1권 = 약 20만자 기준 | 챕터당 최대 20만자 (소설책 1권 분량)
+                분량 기준: 단편 20만+ | 중편 60만+ | 장편 100만+ | 대작 200만+ | 시리즈 400만+ (1권 = 20만자)
               </p>
             </div>
 
@@ -956,7 +1073,7 @@ ${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
                   className="gap-1"
                 >
                   <Wand2 className="h-3 w-3" />
-                  세계관 생성 (8개)
+                  세계관 생성 ({getRecommendedConfig().worldSettings}개)
                 </Button>
               </div>
             </div>
@@ -979,7 +1096,7 @@ ${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
                   className="gap-1"
                 >
                   <Wand2 className="h-3 w-3" />
-                  캐릭터 생성 ({Math.min(Math.max(Math.ceil(calculatedTotalLength / 100000) * 5, 5), 15)}명)
+                  캐릭터 생성 ({getRecommendedConfig().characters}명)
                 </Button>
               </div>
             </div>
@@ -1002,7 +1119,7 @@ ${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
                   className="gap-1"
                 >
                   <Wand2 className="h-3 w-3" />
-                  플롯 포인트 생성 (8개)
+                  플롯 포인트 생성 ({getRecommendedConfig().plotPoints}개)
                 </Button>
               </div>
             </div>

@@ -218,12 +218,13 @@ export default function ProjectSettingsPage() {
 
           {/* 분량 가이드 */}
           <div className="pt-4 border-t">
-            <p className="text-xs text-muted-foreground mb-2">분량 참고:</p>
+            <p className="text-xs text-muted-foreground mb-2">분량 기준 (1권 = 20만자):</p>
             <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <div>단편소설: 약 5만자 (0.25권)</div>
-              <div>중편소설: 약 10만자 (0.5권)</div>
-              <div>장편소설: 약 20만자 (1권)</div>
-              <div>시리즈물 10권: 약 200만자</div>
+              <div>단편: 20만자 이상 (1권+)</div>
+              <div>중편: 60만자 이상 (3권+)</div>
+              <div>장편: 100만자 이상 (5권+)</div>
+              <div>대작: 200만자 이상 (10권+)</div>
+              <div>시리즈급: 400만자 이상 (20권+)</div>
             </div>
           </div>
         </CardContent>
