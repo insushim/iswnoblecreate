@@ -471,7 +471,19 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
     }
   };
 
-  // 2단계: 세계관 생성
+  // 세계관 카테고리 목록
+  const worldCategories: Array<{category: WorldSetting['category'], name: string, importance: WorldSetting['importance']}> = [
+    { category: 'time', name: '시대 배경', importance: 'core' },
+    { category: 'space', name: '지리/공간', importance: 'core' },
+    { category: 'society', name: '사회 구조', importance: 'major' },
+    { category: 'magic', name: '마법/무공 체계', importance: 'major' },
+    { category: 'politics', name: '정치/권력', importance: 'major' },
+    { category: 'history', name: '역사/전설', importance: 'minor' },
+    { category: 'culture', name: '문화/풍습', importance: 'minor' },
+    { category: 'economy', name: '경제/생활', importance: 'minor' },
+  ];
+
+  // 2단계: 세계관 생성 (하나씩 순차 생성)
   const handleStep2_World = async () => {
     if (!settings?.geminiApiKey) {
       alert('API 키를 먼저 설정해주세요.');
@@ -480,48 +492,47 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
 
     setIsAutoGenerating(true);
     setStepError(null);
-    setAutoGenerateProgress({ step: '세계관 생성 중...', current: 1, total: 1 });
 
     try {
       const config = getRecommendedConfig();
-      const worldCount = config.worldSettings;
+      const worldCount = Math.min(config.worldSettings, worldCategories.length);
+      let createdCount = 0;
 
-      const worldPrompt = `당신은 세계관 전문가입니다.
-다음 소설 정보를 바탕으로 세계관 설정 ${worldCount}개를 JSON 배열로 생성해주세요.
+      for (let i = 0; i < worldCount; i++) {
+        const cat = worldCategories[i];
+        setAutoGenerateProgress({ step: `세계관 생성 중... (${i + 1}/${worldCount}) - ${cat.name}`, current: i + 1, total: worldCount });
 
-[필수 목표]
+        const worldPrompt = `당신은 세계관 전문가입니다.
+다음 소설의 "${cat.name}" 설정을 작성해주세요.
+
+[소설 정보]
 - 제목: ${title}
 - 컨셉: ${concept}
-- 시놉시스: ${synopsis}
+- 시놉시스: ${synopsis.slice(0, 500)}
 - 장르: ${selectedGenres.join(', ')}
-- 목표 분량: ${getLengthLabel()} = 총 ${calculatedTotalLength.toLocaleString()}자 (약 ${estimatedBooks}권)
-- 총 ${targetChapterCount}장의 소설
 
-[중요] 이 소설은 ${calculatedTotalLength.toLocaleString()}자 분량입니다.
-${calculatedTotalLength >= 1000000 ? '이것은 대작급 소설이므로 세계관이 매우 정교하고 광대해야 합니다. 각 설정은 최소 200자 이상으로 상세하게 작성해주세요.' : '각 설정은 최소 100자 이상으로 작성해주세요.'}
+[요청]
+"${cat.name}"에 대한 세계관 설정을 JSON 형식으로 작성해주세요.
+${calculatedTotalLength >= 1000000 ? '대작급 소설이므로 300자 이상 상세하게 작성해주세요.' : '150자 이상으로 작성해주세요.'}
 
 JSON 형식 (반드시 이 형식만 출력):
-[
-  {"category": "time", "title": "시대 배경", "description": "상세 설명", "importance": "core"},
-  {"category": "space", "title": "지리/공간", "description": "상세 설명", "importance": "core"}
-]
+{"category": "${cat.category}", "title": "제목", "description": "상세 설명", "importance": "${cat.importance}"}`;
 
-category 값: time, space, society, magic, technology, history, culture, politics, economy, religion, custom
-importance 값: core, major, minor
-
-${worldCount}개 항목을 JSON 배열로만 출력하세요.`;
-
-      const worldResult = await generateJSON<Array<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>>(
-        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
-      );
-
-      for (const world of worldResult) {
-        await createWorldSetting(projectId, world);
+        try {
+          const result = await generateJSON<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>(
+            settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 1500 }
+          );
+          await createWorldSetting(projectId, result);
+          createdCount++;
+        } catch (err) {
+          console.error(`세계관 ${cat.name} 생성 실패:`, err);
+          // 개별 실패해도 계속 진행
+        }
       }
 
       setGenerationStep(2);
       if (!isFullAutoMode) {
-        alert(`2단계 완료! 세계관 ${worldResult.length}개가 생성되었습니다.`);
+        alert(`2단계 완료! 세계관 ${createdCount}개가 생성되었습니다.`);
       }
     } catch (error: unknown) {
       console.error('2단계 실패:', error);
@@ -532,6 +543,47 @@ ${worldCount}개 항목을 JSON 배열로만 출력하세요.`;
         setIsAutoGenerating(false);
         setAutoGenerateProgress(null);
       }
+    }
+  };
+
+  // 개별 세계관 생성 함수
+  const handleGenerateSingleWorld = async (category: WorldSetting['category'], name: string, importance: WorldSetting['importance']) => {
+    if (!settings?.geminiApiKey) {
+      alert('API 키를 먼저 설정해주세요.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setGeneratingType(`world-${category}`);
+
+    try {
+      const worldPrompt = `당신은 세계관 전문가입니다.
+다음 소설의 "${name}" 설정을 작성해주세요.
+
+[소설 정보]
+- 제목: ${title}
+- 컨셉: ${concept}
+- 시놉시스: ${synopsis.slice(0, 500)}
+- 장르: ${selectedGenres.join(', ')}
+
+[요청]
+"${name}"에 대한 세계관 설정을 JSON 형식으로 작성해주세요.
+150자 이상으로 상세하게 작성해주세요.
+
+JSON 형식 (반드시 이 형식만 출력):
+{"category": "${category}", "title": "제목", "description": "상세 설명", "importance": "${importance}"}`;
+
+      const result = await generateJSON<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>(
+        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 1500 }
+      );
+      await createWorldSetting(projectId, result);
+      alert(`"${name}" 세계관이 생성되었습니다.`);
+    } catch (error) {
+      console.error(`세계관 ${name} 생성 실패:`, error);
+      alert(`세계관 생성 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setIsGenerating(false);
+      setGeneratingType('');
     }
   };
 
@@ -1072,9 +1124,32 @@ ${targetChapterCount}개 챕터를 JSON 배열로만 출력하세요.`;
                   size="sm"
                   className="gap-1"
                 >
-                  <Wand2 className="h-3 w-3" />
-                  세계관 생성 ({getRecommendedConfig().worldSettings}개)
+                  <Rocket className="h-3 w-3" />
+                  전체 생성 ({getRecommendedConfig().worldSettings}개)
                 </Button>
+              </div>
+              {/* 개별 세계관 생성 버튼 */}
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground mb-2">개별 생성:</p>
+                <div className="flex flex-wrap gap-2">
+                  {worldCategories.map((cat) => (
+                    <Button
+                      key={cat.category}
+                      onClick={() => handleGenerateSingleWorld(cat.category, cat.name, cat.importance)}
+                      disabled={isAutoGenerating || isGenerating || !synopsis}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                    >
+                      {isGenerating && generatingType === `world-${cat.category}` ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-3 w-3" />
+                      )}
+                      {cat.name}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
 
