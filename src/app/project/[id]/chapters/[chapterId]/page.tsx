@@ -17,6 +17,10 @@ import {
   MessageSquare,
   Rocket,
   Loader2,
+  Download,
+  FileText,
+  FileJson,
+  File,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +39,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -50,6 +62,8 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorldStore } from '@/stores/worldStore';
 import { useUIStore } from '@/stores/uiStore';
 import { generateText } from '@/lib/gemini';
+import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
 import { Chapter, Scene } from '@/types';
 
 const statusOptions: { value: Chapter['status']; label: string }[] = [
@@ -434,6 +448,157 @@ ${recentContent}
 
   const wordCount = content.replace(/\s/g, '').length;
 
+  // HTML을 순수 텍스트로 변환
+  const htmlToPlainText = (html: string): string => {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .trim();
+  };
+
+  // 현재 챕터 TXT로 내보내기
+  const exportChapterToTxt = () => {
+    if (!currentChapter) return;
+
+    let exportContent = `제 ${currentChapter.number}장: ${currentChapter.title}\n`;
+    exportContent += `${'─'.repeat(40)}\n\n`;
+    exportContent += htmlToPlainText(content);
+    exportContent += `\n\n─────────────────────────────────────────\n`;
+    exportContent += `총 ${wordCount.toLocaleString()}자\n`;
+
+    const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
+    saveAs(blob, `${currentProject?.title || '소설'}_${currentChapter.number}장_${currentChapter.title}.txt`);
+  };
+
+  // 현재 챕터 마크다운으로 내보내기
+  const exportChapterToMarkdown = () => {
+    if (!currentChapter) return;
+
+    let exportContent = `# 제 ${currentChapter.number}장: ${currentChapter.title}\n\n`;
+    exportContent += htmlToPlainText(content);
+    exportContent += `\n\n---\n*총 ${wordCount.toLocaleString()}자*\n`;
+
+    const blob = new Blob([exportContent], { type: 'text/markdown;charset=utf-8' });
+    saveAs(blob, `${currentProject?.title || '소설'}_${currentChapter.number}장_${currentChapter.title}.md`);
+  };
+
+  // 현재 챕터 HTML로 내보내기
+  const exportChapterToHtml = () => {
+    if (!currentChapter) return;
+
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${currentProject?.title || '소설'} - ${currentChapter.title}</title>
+  <style>
+    body {
+      font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      line-height: 1.8;
+      color: #333;
+      background: #fafafa;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 2rem; border-bottom: 2px solid #333; padding-bottom: 1rem; }
+    .content { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    p { margin-bottom: 1rem; text-indent: 1rem; }
+    .footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; color: #666; font-size: 0.9rem; text-align: right; }
+  </style>
+</head>
+<body>
+  <h1>제 ${currentChapter.number}장: ${currentChapter.title}</h1>
+  <div class="content">
+    ${content || '<p>내용이 없습니다.</p>'}
+  </div>
+  <div class="footer">총 ${wordCount.toLocaleString()}자</div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    saveAs(blob, `${currentProject?.title || '소설'}_${currentChapter.number}장_${currentChapter.title}.html`);
+  };
+
+  // 현재 챕터 PDF로 내보내기
+  const exportChapterToPdf = async () => {
+    if (!currentChapter) return;
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    const textWidth = pageWidth - margin * 2;
+    let y = 20;
+
+    // 제목
+    doc.setFontSize(18);
+    doc.text(`제 ${currentChapter.number}장: ${currentChapter.title}`, pageWidth / 2, y, { align: 'center' });
+    y += 15;
+
+    // 구분선
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 10;
+
+    // 본문
+    doc.setFontSize(11);
+    const plainText = htmlToPlainText(content);
+    const lines = doc.splitTextToSize(plainText, textWidth);
+
+    for (const line of lines) {
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(line, margin, y);
+      y += 5;
+    }
+
+    // 하단 정보
+    y += 10;
+    if (y > 280) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.setFontSize(9);
+    doc.text(`총 ${wordCount.toLocaleString()}자`, pageWidth - margin, y, { align: 'right' });
+
+    doc.save(`${currentProject?.title || '소설'}_${currentChapter.number}장_${currentChapter.title}.pdf`);
+  };
+
+  // 현재 챕터 JSON으로 백업
+  const exportChapterToJson = () => {
+    if (!currentChapter) return;
+
+    const data = {
+      exportedAt: new Date().toISOString(),
+      projectTitle: currentProject?.title,
+      chapter: {
+        number: currentChapter.number,
+        title: currentChapter.title,
+        status: currentChapter.status,
+        wordCount: wordCount,
+        content: content,
+        scenes: currentChapter.scenes,
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+    saveAs(blob, `${currentProject?.title || '소설'}_${currentChapter.number}장_${currentChapter.title}_backup.json`);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
@@ -512,6 +677,49 @@ ${recentContent}
             {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             저장
           </Button>
+
+          {/* 내보내기 드롭다운 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
+                내보내기
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>현재 챕터 저장</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={exportChapterToTxt} className="gap-2 cursor-pointer">
+                <FileText className="h-4 w-4" />
+                텍스트 파일 (.txt)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportChapterToMarkdown} className="gap-2 cursor-pointer">
+                <FileText className="h-4 w-4" />
+                마크다운 (.md)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportChapterToHtml} className="gap-2 cursor-pointer">
+                <File className="h-4 w-4" />
+                HTML 파일 (.html)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportChapterToPdf} className="gap-2 cursor-pointer">
+                <File className="h-4 w-4" />
+                PDF 문서 (.pdf)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={exportChapterToJson} className="gap-2 cursor-pointer">
+                <FileJson className="h-4 w-4" />
+                JSON 백업 (.json)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => router.push(`/project/${projectId}/export`)}
+                className="gap-2 cursor-pointer"
+              >
+                <Download className="h-4 w-4" />
+                전체 내보내기...
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
