@@ -41,6 +41,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -535,12 +536,10 @@ function AddVolumeDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>새 권 추가</DialogTitle>
-        </DialogHeader>
-        <div className="py-4">
-          <p className="text-muted-foreground">
+          <DialogDescription>
             {nextNumber}권을 추가합니다. 추가 후 상세 설정을 진행하세요.
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             취소
@@ -577,6 +576,9 @@ function AddSceneDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>새 씬 추가</DialogTitle>
+          <DialogDescription>
+            씬의 제목과 목표 글자수를 설정하세요.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div>
@@ -637,6 +639,9 @@ function EditVolumeDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{volume.volumeNumber}권 설정</DialogTitle>
+          <DialogDescription>
+            권의 시작점, 종료점, 핵심 사건을 설정하세요. 종료점은 구체적인 대사나 행동으로 명시해야 합니다.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">
@@ -802,6 +807,9 @@ function EditSceneDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>씬 {scene.sceneNumber} 설정</DialogTitle>
+          <DialogDescription>
+            씬의 장소, 시간, 등장인물, 종료 조건 등을 설정하세요.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">
