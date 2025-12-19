@@ -15,6 +15,7 @@ import {
   Target,
   ArrowRight,
   Settings,
+  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +42,7 @@ const quickActions = [
   { title: '세계관', href: 'world', icon: Globe, description: '세계관 구축하기' },
   { title: '캐릭터', href: 'characters', icon: Users, description: '캐릭터 설계하기' },
   { title: '플롯', href: 'plot', icon: GitBranch, description: '스토리 구조 설계' },
+  { title: '권/씬 구조', href: 'volumes', icon: Layers, description: '권별 구조 및 종료점 설정' },
   { title: '집필', href: 'chapters', icon: Edit3, description: '소설 집필하기' },
   { title: '분석', href: 'analysis', icon: BarChart3, description: 'AI 피드백 받기' },
 ];
