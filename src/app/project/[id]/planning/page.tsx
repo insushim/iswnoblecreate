@@ -38,8 +38,9 @@ import { useWorldStore } from '@/stores/worldStore';
 import { useCharacterStore } from '@/stores/characterStore';
 import { usePlotStore } from '@/stores/plotStore';
 import { useChapterStore } from '@/stores/chapterStore';
+import { useVolumeStore } from '@/stores/volumeStore';
 import { generateJSON, generateText } from '@/lib/gemini';
-import { WorldSetting, Character, PlotPoint } from '@/types';
+import { WorldSetting, Character, PlotPoint, VolumeStructure, SceneStructure } from '@/types';
 
 const genres = [
   '로맨스', '판타지', '무협', '현대', '역사', '미스터리', '스릴러',
@@ -77,6 +78,7 @@ export default function PlanningPage() {
   const { createCharacter } = useCharacterStore();
   const { fetchPlotStructure, addPlotPoint } = usePlotStore();
   const { createChapter } = useChapterStore();
+  const { createVolume, createScene, updateVolume } = useVolumeStore();
 
   const [title, setTitle] = useState('');
   const [concept, setConcept] = useState('');
@@ -956,9 +958,18 @@ JSON 형식 (반드시 이 형식만 출력):
         }
       }
 
+      // 권/씬 구조 자동 생성
+      setAutoGenerateProgress({
+        step: `권/씬 구조 생성 중...`,
+        current: targetChapterCount,
+        total: targetChapterCount
+      });
+
+      await generateVolumeStructure(createdChapters);
+
       setGenerationStep(5);
       if (!isFullAutoMode) {
-        alert(`5단계 완료! 챕터 ${createdCount}개가 생성되었습니다.\n\n모든 기획이 완료되었습니다!`);
+        alert(`5단계 완료! 챕터 ${createdCount}개와 권/씬 구조가 생성되었습니다.\n\n모든 기획이 완료되었습니다!`);
       }
     } catch (error: unknown) {
       console.error('5단계 실패:', error);
@@ -968,6 +979,207 @@ JSON 형식 (반드시 이 형식만 출력):
       if (!isFullAutoMode) {
         setIsAutoGenerating(false);
         setAutoGenerateProgress(null);
+      }
+    }
+  };
+
+  // 권/씬 구조 자동 생성
+  const generateVolumeStructure = async (chapters: Array<{number: number, title: string, summary: string}>) => {
+    if (!settings?.geminiApiKey) return;
+
+    const config = getRecommendedConfig();
+    const scenesPerChapter = config.scenesPerChapter;
+
+    // 권 수 계산 (챕터를 권으로 그룹핑 - 1권 = 약 20만자 기준)
+    const chaptersPerVolume = Math.max(1, Math.floor(200000 / targetChapterLength));
+    const totalVolumes = Math.ceil(targetChapterCount / chaptersPerVolume);
+
+    for (let volNum = 1; volNum <= totalVolumes; volNum++) {
+      setAutoGenerateProgress({
+        step: `${volNum}권 구조 생성 중... (${volNum}/${totalVolumes})`,
+        current: volNum,
+        total: totalVolumes
+      });
+
+      // 이 권에 해당하는 챕터들
+      const startChapter = (volNum - 1) * chaptersPerVolume + 1;
+      const endChapter = Math.min(volNum * chaptersPerVolume, targetChapterCount);
+      const volumeChapters = chapters.filter(c => c.number >= startChapter && c.number <= endChapter);
+
+      // 권 정보 생성
+      const volumePrompt = `당신은 소설 구성 전문가입니다.
+다음 소설의 ${volNum}권 구조를 JSON으로 생성해주세요.
+
+[소설 정보]
+- 제목: ${title}
+- 시놉시스: ${synopsis.slice(0, 500)}
+- 장르: ${selectedGenres.join(', ')}
+- 총 ${totalVolumes}권 중 ${volNum}권
+- 이 권의 챕터: ${startChapter}장 ~ ${endChapter}장
+
+[이 권에 포함된 챕터들]
+${volumeChapters.map(c => `${c.number}장 "${c.title}": ${c.summary}`).join('\n')}
+
+[요청]
+${volNum}권의 핵심 내용과 종료점을 생성해주세요.
+⚠️ 종료점은 반드시 구체적인 대사나 행동으로 명시해야 합니다.
+모호한 표현("성장한다", "깨닫는다" 등) 금지!
+
+JSON 형식 (반드시 이 형식만 출력):
+{
+  "title": "${volNum}권 부제목",
+  "startPoint": "이 권의 시작 상황 1문장",
+  "endPoint": "이 권의 종료 상황 1문장",
+  "endPointExact": "정확한 종료 대사 또는 행동 (예: \\"그가 말했다. '이제 시작이야.'\\" 또는 \\"그녀는 문을 닫고 뒤돌아섰다.\\")",
+  "endPointType": "dialogue 또는 action",
+  "coreEvent": "이 권의 핵심 사건 1문장"
+}`;
+
+      try {
+        const volumeResult = await generateJSON<{
+          title: string;
+          startPoint: string;
+          endPoint: string;
+          endPointExact: string;
+          endPointType: 'dialogue' | 'action';
+          coreEvent: string;
+        }>(settings.geminiApiKey, volumePrompt, { temperature: 0.7, maxTokens: 1500 });
+
+        // 권 생성
+        const newVolume = await createVolume(projectId, {
+          volumeNumber: volNum,
+          title: volumeResult.title || `${volNum}권`,
+          targetWordCount: chaptersPerVolume * targetChapterLength,
+          startPoint: volumeResult.startPoint,
+          endPoint: volumeResult.endPoint,
+          endPointExact: volumeResult.endPointExact,
+          endPointType: volumeResult.endPointType || 'action',
+          coreEvent: volumeResult.coreEvent,
+          status: 'planning',
+        });
+
+        // 이 권의 씬들 생성
+        const totalScenes = (endChapter - startChapter + 1) * scenesPerChapter;
+        const sceneWordCount = Math.floor((chaptersPerVolume * targetChapterLength) / totalScenes);
+
+        for (let sceneNum = 1; sceneNum <= totalScenes; sceneNum++) {
+          const chapterIndex = Math.floor((sceneNum - 1) / scenesPerChapter);
+          const sceneInChapter = ((sceneNum - 1) % scenesPerChapter) + 1;
+          const currentChapter = volumeChapters[chapterIndex] || volumeChapters[volumeChapters.length - 1];
+
+          setAutoGenerateProgress({
+            step: `${volNum}권 씬 ${sceneNum}/${totalScenes} 생성 중...`,
+            current: sceneNum,
+            total: totalScenes
+          });
+
+          const scenePrompt = `당신은 소설 구성 전문가입니다.
+다음 소설의 ${volNum}권 ${sceneNum}번째 씬을 JSON으로 생성해주세요.
+
+[소설 정보]
+- 제목: ${title}
+- 장르: ${selectedGenres.join(', ')}
+- 현재 챕터: ${currentChapter.number}장 "${currentChapter.title}"
+- 챕터 내 ${sceneInChapter}번째 씬
+
+[요청]
+이 씬의 설정을 생성해주세요.
+⚠️ 종료 조건은 구체적인 대사나 행동으로 명시!
+
+JSON 형식:
+{
+  "title": "씬 제목",
+  "pov": "시점 캐릭터 이름",
+  "location": "장소",
+  "timeframe": "시간대",
+  "startCondition": "씬 시작 상황",
+  "endCondition": "씬 종료 조건 (구체적 대사/행동)",
+  "endConditionType": "dialogue 또는 action",
+  "mustInclude": ["이 씬에서 반드시 포함할 내용 1", "내용 2"]
+}`;
+
+          try {
+            const sceneResult = await generateJSON<{
+              title: string;
+              pov: string;
+              location: string;
+              timeframe: string;
+              startCondition: string;
+              endCondition: string;
+              endConditionType: 'dialogue' | 'action';
+              mustInclude: string[];
+            }>(settings.geminiApiKey, scenePrompt, { temperature: 0.7, maxTokens: 1000 });
+
+            await createScene(newVolume.id, {
+              sceneNumber: sceneNum,
+              title: sceneResult.title || `씬 ${sceneNum}`,
+              targetWordCount: sceneWordCount,
+              pov: sceneResult.pov || '',
+              povType: 'third-limited',
+              location: sceneResult.location || '',
+              timeframe: sceneResult.timeframe || '',
+              participants: [],
+              mustInclude: sceneResult.mustInclude || [],
+              startCondition: sceneResult.startCondition || '',
+              endCondition: sceneResult.endCondition || '',
+              endConditionType: sceneResult.endConditionType || 'action',
+              status: 'pending',
+            });
+          } catch (sceneErr) {
+            console.error(`${volNum}권 씬 ${sceneNum} 생성 실패:`, sceneErr);
+            // 기본 씬 생성
+            await createScene(newVolume.id, {
+              sceneNumber: sceneNum,
+              title: `${volNum}-${sceneNum}`,
+              targetWordCount: sceneWordCount,
+              pov: '',
+              povType: 'third-limited',
+              location: '',
+              timeframe: '',
+              participants: [],
+              mustInclude: [],
+              startCondition: '',
+              endCondition: '',
+              endConditionType: 'action',
+              status: 'pending',
+            });
+          }
+        }
+      } catch (volErr) {
+        console.error(`${volNum}권 생성 실패:`, volErr);
+        // 기본 권 생성
+        const newVolume = await createVolume(projectId, {
+          volumeNumber: volNum,
+          title: `${volNum}권`,
+          targetWordCount: chaptersPerVolume * targetChapterLength,
+          startPoint: '',
+          endPoint: '',
+          endPointExact: '',
+          endPointType: 'action',
+          coreEvent: '',
+          status: 'planning',
+        });
+
+        // 기본 씬들 생성
+        const totalScenes = (endChapter - startChapter + 1) * scenesPerChapter;
+        const sceneWordCount = Math.floor((chaptersPerVolume * targetChapterLength) / totalScenes);
+        for (let sceneNum = 1; sceneNum <= totalScenes; sceneNum++) {
+          await createScene(newVolume.id, {
+            sceneNumber: sceneNum,
+            title: `${volNum}-${sceneNum}`,
+            targetWordCount: sceneWordCount,
+            pov: '',
+            povType: 'third-limited',
+            location: '',
+            timeframe: '',
+            participants: [],
+            mustInclude: [],
+            startCondition: '',
+            endCondition: '',
+            endConditionType: 'action',
+            status: 'pending',
+          });
+        }
       }
     }
   };
