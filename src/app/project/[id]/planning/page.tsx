@@ -504,6 +504,11 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
         const cat = worldCategories[i];
         setAutoGenerateProgress({ step: `세계관 생성 중... (${i + 1}/${worldCount}) - ${cat.name}`, current: i + 1, total: worldCount });
 
+        // Rate Limit 방지를 위한 딜레이 (첫 요청 제외)
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
         const worldPrompt = `당신은 세계관 전문가입니다.
 다음 소설의 "${cat.name}" 설정을 작성해주세요.
 
@@ -522,7 +527,7 @@ JSON 형식 (반드시 이 형식만 출력):
 
         try {
           const result = await generateJSON<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>(
-            settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 1500 }
+            settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
           );
           await createWorldSetting(projectId, result);
           createdCount++;
@@ -576,7 +581,7 @@ JSON 형식 (반드시 이 형식만 출력):
 {"category": "${category}", "title": "제목", "description": "상세 설명", "importance": "${importance}"}`;
 
       const result = await generateJSON<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>(
-        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 1500 }
+        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
       );
       await createWorldSetting(projectId, result);
       alert(`"${name}" 세계관이 생성되었습니다.`);
@@ -632,6 +637,11 @@ JSON 형식 (반드시 이 형식만 출력):
           total: numCharacters
         });
 
+        // Rate Limit 방지를 위한 딜레이 (첫 요청 제외)
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
         const existingCharsContext = createdCharacters.length > 0
           ? `\n\n[이미 생성된 캐릭터들 - 중복되지 않게 새로운 캐릭터 생성]\n${createdCharacters.map(c => `- ${c.name} (${c.role}): ${c.description}`).join('\n')}`
           : '';
@@ -679,7 +689,7 @@ JSON 형식 (반드시 이 형식만 출력):
             motivation: string;
             goal: string;
             appearance?: string;
-          }>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 1500 });
+          }>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 4096 });
 
           await createCharacter(projectId, {
             name: charResult.name,
@@ -791,6 +801,11 @@ JSON 형식 (반드시 이 형식만 출력):
           total: plotCount
         });
 
+        // Rate Limit 방지를 위한 딜레이 (첫 요청 제외)
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
         const existingPlotsContext = createdPlots.length > 0
           ? `\n\n[이전 플롯 포인트들 - 연속성 있게 이어지도록]\n${createdPlots.map((p, idx) => `${idx + 1}. ${p.title} (${p.type})`).join('\n')}`
           : '';
@@ -823,7 +838,7 @@ JSON 형식 (반드시 이 형식만 출력):
             description: string;
             type: PlotPoint['type'];
             order: number;
-          }>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 1000 });
+          }>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 4096 });
 
           await addPlotPoint({
             ...plotResult,
@@ -897,6 +912,11 @@ JSON 형식 (반드시 이 형식만 출력):
           total: targetChapterCount
         });
 
+        // Rate Limit 방지를 위한 딜레이 (첫 요청 제외)
+        if (i > 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
         // 최근 3개 챕터만 컨텍스트로 사용 (토큰 절약)
         const recentChapters = createdChapters.slice(-3);
         const existingChaptersContext = recentChapters.length > 0
@@ -936,7 +956,7 @@ JSON 형식 (반드시 이 형식만 출력):
             title: string;
             purpose: string;
             keyEvents: string[];
-          }>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 1200 });
+          }>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 4096 });
 
           await createChapter(projectId, {
             number: chapterResult.number,
@@ -1043,7 +1063,7 @@ JSON 형식 (반드시 이 형식만 출력):
           endPointExact: string;
           endPointType: 'dialogue' | 'action';
           coreEvent: string;
-        }>(settings.geminiApiKey, volumePrompt, { temperature: 0.7, maxTokens: 1500 });
+        }>(settings.geminiApiKey, volumePrompt, { temperature: 0.7, maxTokens: 4096 });
 
         // 권 생성
         const newVolume = await createVolume(projectId, {
@@ -1108,7 +1128,7 @@ JSON 형식:
               endCondition: string;
               endConditionType: 'dialogue' | 'action';
               mustInclude: string[];
-            }>(settings.geminiApiKey, scenePrompt, { temperature: 0.7, maxTokens: 1000 });
+            }>(settings.geminiApiKey, scenePrompt, { temperature: 0.7, maxTokens: 4096 });
 
             await createScene(newVolume.id, {
               sceneNumber: sceneNum,
@@ -1200,17 +1220,29 @@ JSON 형식:
       setAutoGenerateProgress({ step: '1단계: 시놉시스 생성 중...', current: 1, total: 5 });
       await handleStep1_Synopsis();
 
+      // 단계 전환 딜레이 (Rate Limit 방지)
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
       // 2단계: 세계관
       setAutoGenerateProgress({ step: '2단계: 세계관 생성 중...', current: 2, total: 5 });
       await handleStep2_World();
+
+      // 단계 전환 딜레이
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // 3단계: 캐릭터
       setAutoGenerateProgress({ step: '3단계: 캐릭터 생성 중...', current: 3, total: 5 });
       await handleStep3_Characters();
 
+      // 단계 전환 딜레이
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
       // 4단계: 플롯
       setAutoGenerateProgress({ step: '4단계: 플롯 생성 중...', current: 4, total: 5 });
       await handleStep4_Plot();
+
+      // 단계 전환 딜레이
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // 5단계: 챕터
       setAutoGenerateProgress({ step: '5단계: 챕터 생성 중...', current: 5, total: 5 });
