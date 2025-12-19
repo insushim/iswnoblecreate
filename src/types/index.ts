@@ -609,3 +609,140 @@ export interface AppSettings {
   notifications: boolean;
   geminiApiKey?: string;
 }
+
+// ============================================
+// 소설 집필 시스템 - 권/씬 구조 관리
+// ============================================
+
+// 권(Volume) 구조 - 기존 Chapter를 확장
+export interface VolumeStructure {
+  id: string;
+  projectId: string;
+  volumeNumber: number;
+  title: string;
+  targetWordCount: number; // 목표 글자수
+  startPoint: string; // 이 권의 시작점 (구체적 장면)
+  endPoint: string; // 이 권의 종료점 (구체적 장면/대사) ⚠️ 핵심
+  endPointType: 'dialogue' | 'action' | 'narration' | 'scene';
+  endPointExact: string; // 정확한 종료 대사 또는 행동
+  coreEvent: string; // 핵심 사건
+  previousVolumeSummary?: string; // 이전 권 요약
+  nextVolumePreview?: string; // 다음 권 예고 (참고용, 쓰지 말 것)
+  scenes: SceneStructure[]; // 이 권의 씬 목록
+  status: 'planning' | 'writing' | 'completed';
+  actualWordCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 씬 구조 - 분할 집필용
+export interface SceneStructure {
+  id: string;
+  volumeId: string;
+  sceneNumber: number;
+  title: string;
+  targetWordCount: number;
+  pov: string; // 시점 인물
+  povType: 'first' | 'third-limited' | 'omniscient';
+  location: string;
+  timeframe: string;
+  participants: string[]; // 등장인물
+
+  // 필수 포함 내용
+  mustInclude: string[]; // 반드시 포함할 내용 (3-5개)
+
+  // 시작/종료 조건
+  startCondition: string; // 이 씬의 시작 상황
+  endCondition: string; // ⚠️ 핵심: 이 씬의 종료 조건 (구체적 장면/대사)
+  endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
+
+  // 연결
+  previousSceneSummary?: string; // 직전 씬 요약 (이어쓰기용)
+  nextScenePreview?: string; // 다음 씬 예고 (참고용만)
+
+  // 상태
+  status: 'pending' | 'in_progress' | 'completed' | 'needs_revision';
+  actualWordCount: number;
+  content?: string;
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 집필 프롬프트 생성 설정
+export interface WritingPromptConfig {
+  projectId: string;
+  volumeId: string;
+  sceneId?: string; // 씬 단위 집필시
+
+  // 집필 모드
+  mode: 'volume' | 'scene' | 'continue'; // 권 전체 / 씬 단위 / 이어쓰기
+
+  // 이어쓰기 설정
+  continueFrom?: {
+    lastContent: string; // 마지막 500자
+    remainingContent: string[]; // 아직 안 쓴 내용
+  };
+
+  // 스타일 설정
+  style: WritingStyle;
+}
+
+// 글쓰기 스타일
+export interface WritingStyle {
+  writingStyle: string;
+  perspective: 'first' | 'third-limited' | 'omniscient' | 'second';
+  tense: 'past' | 'present';
+  dialogueRatio: number; // 0-100
+  descriptionDetail: number; // 1-10
+  pacing: 'slow' | 'moderate' | 'fast';
+  emotionIntensity: number; // 1-10
+  additionalInstructions?: string;
+}
+
+// 생성된 프롬프트
+export interface GeneratedPrompt {
+  systemPrompt: string;
+  userPrompt: string;
+  metadata: {
+    volumeNumber: number;
+    sceneNumber?: number;
+    targetWordCount: number;
+    endCondition: string;
+    mode: 'volume' | 'scene' | 'continue';
+  };
+}
+
+// 분량 체크 결과
+export interface WordCountCheck {
+  currentCount: number;
+  targetCount: number;
+  percentage: number;
+  status: 'under' | 'on_target' | 'over';
+  endConditionReached: boolean;
+}
+
+// 권별 진행 상황
+export interface VolumeProgress {
+  volumeId: string;
+  volumeNumber: number;
+  title: string;
+  totalScenes: number;
+  completedScenes: number;
+  targetWordCount: number;
+  actualWordCount: number;
+  progressPercentage: number;
+  status: 'planning' | 'writing' | 'completed';
+  estimatedCompletion?: Date;
+}
+
+// 프로젝트 전체 진행 상황
+export interface ProjectWritingProgress {
+  projectId: string;
+  totalVolumes: number;
+  completedVolumes: number;
+  totalTargetWordCount: number;
+  totalActualWordCount: number;
+  volumes: VolumeProgress[];
+  overallPercentage: number;
+}
