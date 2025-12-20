@@ -100,6 +100,8 @@ export function VolumeStructureManager({
   const [selectedVolumeForScene, setSelectedVolumeForScene] = useState<string | null>(null);
   const [expandedVolumes, setExpandedVolumes] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [regeneratingVolumeId, setRegeneratingVolumeId] = useState<string | null>(null);
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
 
   // 프로젝트 권 목록 가져오기
   const projectVolumes = volumes.filter(v => v.projectId === projectId);
@@ -129,12 +131,25 @@ export function VolumeStructureManager({
     );
   };
 
-  // AI 권 구조 자동 생성
+  // 전체 권 삭제
+  const handleDeleteAllVolumes = async () => {
+    for (const vol of projectVolumes) {
+      await deleteVolume(vol.id);
+    }
+    setIsDeleteAllOpen(false);
+  };
+
+  // AI 권 구조 자동 생성 (기존 전체 삭제 후 새로 생성)
   const handleAutoGenerateVolumes = async () => {
     if (!settings?.geminiApiKey || !currentProject) return;
 
     setIsGenerating(true);
     try {
+      // 기존 권 전체 삭제
+      for (const vol of projectVolumes) {
+        await deleteVolume(vol.id);
+      }
+
       const totalWordCount = currentProject.settings?.targetTotalLength || 4300000; // 기본 430만자
       const avgVolumeWordCount = 195000; // 권당 평균 19.5만자
       const suggestedVolumeCount = Math.ceil(totalWordCount / avgVolumeWordCount);
@@ -149,15 +164,8 @@ export function VolumeStructureManager({
 - 목표 글자수: ${(totalWordCount / 10000).toFixed(0)}만자
 - 예상 권수: ${suggestedVolumeCount}권
 
-## 기존 권 구조
-${projectVolumes.length > 0
-  ? projectVolumes.map(v => `- ${v.volumeNumber}권: ${v.title} (${v.startPoint || '시작점 미설정'} → ${v.endPoint || '종료점 미설정'})`).join('\n')
-  : '없음 (새로 생성 필요)'}
-
 ## 요청
-${projectVolumes.length > 0
-  ? '기존 권에 이어서 추가할 권 3개를 생성해주세요.'
-  : `총 ${Math.min(suggestedVolumeCount, 22)}권의 구조를 생성해주세요.`}
+총 ${Math.min(suggestedVolumeCount, 22)}권의 구조를 처음부터 생성해주세요.
 
 각 권은 19-20만자 분량입니다.
 종료점은 반드시 구체적인 대사나 행동으로 명시해야 합니다.
@@ -190,15 +198,10 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
         endPointExact: string;
       }>>(settings.geminiApiKey, prompt, { temperature: 0.8 });
 
-      // 기존 권 번호 이후부터 시작
-      const startNumber = projectVolumes.length > 0
-        ? Math.max(...projectVolumes.map(v => v.volumeNumber)) + 1
-        : 1;
-
       for (let i = 0; i < result.length; i++) {
         const vol = result[i];
         await createVolume(projectId, {
-          volumeNumber: startNumber + i,
+          volumeNumber: i + 1,
           title: vol.title,
           targetWordCount: vol.targetWordCount || 195000,
           startPoint: vol.startPoint,
@@ -216,6 +219,89 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
       alert('권 구조 생성 중 오류가 발생했습니다.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // 단일 권 재생성
+  const handleRegenerateVolume = async (volumeId: string) => {
+    if (!settings?.geminiApiKey || !currentProject) return;
+
+    const volume = projectVolumes.find(v => v.id === volumeId);
+    if (!volume) return;
+
+    setRegeneratingVolumeId(volumeId);
+    try {
+      // 이전 권과 다음 권 정보 가져오기
+      const prevVolume = projectVolumes.find(v => v.volumeNumber === volume.volumeNumber - 1);
+      const nextVolume = projectVolumes.find(v => v.volumeNumber === volume.volumeNumber + 1);
+
+      const prompt = `다음 소설의 ${volume.volumeNumber}권 구조를 재생성해주세요.
+
+## 작품 정보
+- 제목: ${currentProject.title}
+- 장르: ${currentProject.genre.join(', ')}
+- 컨셉: ${currentProject.concept}
+- 시놉시스: ${currentProject.synopsis}
+
+## 이전 권 (${volume.volumeNumber - 1}권)
+${prevVolume
+  ? `- 제목: ${prevVolume.title}
+- 종료점: ${prevVolume.endPoint || '미설정'}
+- 정확한 종료: ${prevVolume.endPointExact || '미설정'}`
+  : '없음 (첫 번째 권)'}
+
+## 다음 권 (${volume.volumeNumber + 1}권)
+${nextVolume
+  ? `- 제목: ${nextVolume.title}
+- 시작점: ${nextVolume.startPoint || '미설정'}`
+  : '없음 (마지막 권)'}
+
+## 요청
+${volume.volumeNumber}권의 구조를 재생성해주세요.
+이전 권의 종료점에서 자연스럽게 이어지고, 다음 권의 시작점으로 연결되어야 합니다.
+
+종료점은 반드시 구체적인 대사나 행동으로 명시해야 합니다.
+모호한 표현(성장한다, 변화한다, 깨닫는다) 대신 구체적인 장면을 제시하세요.
+
+JSON 형식 (단일 객체):
+{
+  "title": "권 제목",
+  "targetWordCount": 195000,
+  "startPoint": "이 권이 시작되는 구체적인 상황",
+  "coreEvent": "이 권의 핵심 사건/갈등",
+  "endPoint": "이 권이 끝나는 구체적인 장면 설명",
+  "endPointType": "dialogue",
+  "endPointExact": "정확한 종료 대사 또는 행동"
+}
+
+endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(장면)`;
+
+      const result = await generateJSON<{
+        title: string;
+        targetWordCount: number;
+        startPoint: string;
+        coreEvent: string;
+        endPoint: string;
+        endPointType: 'dialogue' | 'action' | 'narration' | 'scene';
+        endPointExact: string;
+      }>(settings.geminiApiKey, prompt, { temperature: 0.8 });
+
+      await updateVolume(volumeId, {
+        title: result.title,
+        targetWordCount: result.targetWordCount || 195000,
+        startPoint: result.startPoint,
+        coreEvent: result.coreEvent,
+        endPoint: result.endPoint,
+        endPointType: result.endPointType || 'dialogue',
+        endPointExact: result.endPointExact,
+      });
+
+      await fetchVolumes(projectId);
+    } catch (error) {
+      console.error('권 재생성 실패:', error);
+      alert('권 재생성 중 오류가 발생했습니다.');
+    } finally {
+      setRegeneratingVolumeId(null);
     }
   };
 
@@ -239,6 +325,16 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
             {isGenerating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             AI 재생성
           </Button>
+          {projectVolumes.length > 0 && (
+            <Button
+              variant="outline"
+              className="gap-2 text-destructive hover:text-destructive"
+              onClick={() => setIsDeleteAllOpen(true)}
+            >
+              <Trash2 className="w-4 h-4" />
+              전체 삭제
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsAddVolumeOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             권 추가
@@ -315,6 +411,8 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
                 }}
                 onAutoSplit={(count) => handleAutoSplit(volume.id, count)}
                 onGeneratePrompt={onGeneratePrompt}
+                onRegenerate={() => handleRegenerateVolume(volume.id)}
+                isRegenerating={regeneratingVolumeId === volume.id}
                 validation={validateVolumeEndPoints(volume.id)}
               />
             ))
@@ -341,6 +439,32 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
           }}
         />
       )}
+
+      {/* 전체 삭제 확인 다이얼로그 */}
+      <Dialog open={isDeleteAllOpen} onOpenChange={setIsDeleteAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              전체 권 삭제
+            </DialogTitle>
+            <DialogDescription>
+              정말로 모든 권({projectVolumes.length}개)을 삭제하시겠습니까?
+              <br />
+              <span className="text-destructive font-medium">이 작업은 되돌릴 수 없습니다.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteAllOpen(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAllVolumes}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              전체 삭제
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -358,6 +482,8 @@ interface VolumeCardProps {
   onAddScene: () => void;
   onAutoSplit: (count: number) => void;
   onGeneratePrompt?: (volumeId: string, sceneId?: string) => void;
+  onRegenerate: () => void;
+  isRegenerating: boolean;
   validation: { isValid: boolean; issues: string[] };
 }
 
@@ -370,6 +496,8 @@ function VolumeCard({
   onAddScene,
   onAutoSplit,
   onGeneratePrompt,
+  onRegenerate,
+  isRegenerating,
   validation,
 }: VolumeCardProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -419,6 +547,27 @@ function VolumeCard({
             </div>
             <Progress value={progressPercent} className="w-24 h-2" />
 
+            {/* 개별 재생성 버튼 */}
+            {!validation.isValid && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-purple-600 border-purple-300 hover:bg-purple-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRegenerate();
+                }}
+                disabled={isRegenerating}
+              >
+                {isRegenerating ? (
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+                재생성
+              </Button>
+            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button variant="ghost" size="icon">
@@ -429,6 +578,14 @@ function VolumeCard({
                 <DropdownMenuItem onClick={() => setIsEditing(true)}>
                   <Settings className="w-4 h-4 mr-2" />
                   설정 편집
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onRegenerate} disabled={isRegenerating}>
+                  {isRegenerating ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 mr-2" />
+                  )}
+                  AI 재생성
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onAddScene}>
                   <Plus className="w-4 h-4 mr-2" />
