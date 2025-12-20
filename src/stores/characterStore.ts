@@ -28,7 +28,7 @@ export const useCharacterStore = create<CharacterState>((set, get) => ({
   error: null,
 
   fetchCharacters: async (projectId: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, currentCharacter: null });
     try {
       const characters = await db.characters
         .where('projectId')

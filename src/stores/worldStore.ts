@@ -43,7 +43,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   error: null,
 
   fetchWorldSettings: async (projectId: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, currentSetting: null });
     try {
       const settings = await db.worldSettings
         .where('projectId')

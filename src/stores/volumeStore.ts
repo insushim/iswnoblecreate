@@ -66,14 +66,12 @@ export const useVolumeStore = create<VolumeStore>()(
       isLoading: false,
       error: null,
 
-      // 권 목록 조회
+      // 권 목록 조회 - 현재 프로젝트 권만 currentVolume/currentScene 초기화
       fetchVolumes: async (projectId: string) => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, currentVolume: null, currentScene: null });
         try {
-          // localStorage에서 조회 (Dexie로 확장 가능)
-          const allVolumes = get().volumes;
-          const projectVolumes = allVolumes.filter(v => v.projectId === projectId);
-          set({ volumes: projectVolumes.length > 0 ? allVolumes : allVolumes, isLoading: false });
+          // localStorage에서 조회 - 모든 volumes는 유지하되 현재 프로젝트 권만 사용
+          set({ isLoading: false });
         } catch (error) {
           set({ error: '권 목록 조회 실패', isLoading: false });
         }

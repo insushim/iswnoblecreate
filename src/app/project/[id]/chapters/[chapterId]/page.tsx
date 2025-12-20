@@ -82,7 +82,7 @@ export default function ChapterEditorPage() {
 
   const { currentChapter, currentScene, fetchChapter, updateChapter, createScene, updateScene, setCurrentScene, saveSceneVersion } = useChapterStore();
   const { characters, fetchCharacters } = useCharacterStore();
-  const { currentProject } = useProjectStore();
+  const { currentProject, fetchProject } = useProjectStore();
   const { settings } = useSettingsStore();
   const { worldSettings, fetchWorldSettings } = useWorldStore();
   const { writingMode, setWritingMode } = useUIStore();
@@ -99,6 +99,7 @@ export default function ChapterEditorPage() {
     const loadData = async () => {
       setIsLoading(true);
       await Promise.all([
+        fetchProject(projectId),
         fetchChapter(chapterId),
         fetchCharacters(projectId),
         fetchWorldSettings(projectId),
@@ -106,7 +107,7 @@ export default function ChapterEditorPage() {
       setIsLoading(false);
     };
     loadData();
-  }, [chapterId, projectId, fetchChapter, fetchCharacters, fetchWorldSettings]);
+  }, [chapterId, projectId, fetchProject, fetchChapter, fetchCharacters, fetchWorldSettings]);
 
   useEffect(() => {
     if (currentChapter?.scenes && currentChapter.scenes.length > 0 && !currentScene) {
@@ -243,7 +244,7 @@ export default function ChapterEditorPage() {
     return result.trim();
   }, []);
 
-  // AI 자동 집필 - 전체 챕터 생성 (목표 글자수까지 반복, 최대 20만자)
+  // AI 자동 집필 - 씬별로 순차 생성 (목표 글자수까지 반복, 이전 씬 내용 참고)
   const handleAutoWriteChapter = async () => {
     if (!settings?.geminiApiKey || !currentProject || !currentChapter) return;
 
@@ -254,34 +255,16 @@ export default function ChapterEditorPage() {
 
     setIsAutoWriting(true);
 
-    const targetLength = currentProject.settings?.targetChapterLength || 10000;
-    let currentText = content;
-    let iteration = 0;
-    // 20만자 기준 약 50회 반복 필요 (회당 ~4000자)
-    const maxIterations = Math.ceil(targetLength / 3000) + 10; // 목표에 따라 동적 설정
-    let consecutiveErrors = 0;
-
     try {
-      // 상세 캐릭터 정보 구성 (새로운 확장 필드 활용)
+      // 상세 캐릭터 정보 구성
       const characterInfo = characters
         .slice(0, 8)
         .map(c => {
           let info = `[${c.name}] (${c.role})`;
           info += `\n  성격: ${c.personality}`;
-          info += `\n  배경: ${c.background}`;
-          // 확장 필드가 있으면 포함
-          if (c.speechStyle) {
-            info += `\n  말투: ${c.speechStyle}`;
-          }
-          if (c.strengths?.length > 0) {
-            info += `\n  강점: ${c.strengths.join(', ')}`;
-          }
-          if (c.weaknesses?.length > 0) {
-            info += `\n  약점: ${c.weaknesses.join(', ')}`;
-          }
-          if (c.motivation) {
-            info += `\n  동기: ${c.motivation}`;
-          }
+          if (c.background) info += `\n  배경: ${c.background}`;
+          if (c.speechPattern?.tone) info += `\n  말투: ${c.speechPattern.tone}`;
+          if (c.goal) info += `\n  목표: ${c.goal}`;
           return info;
         })
         .join('\n\n');
@@ -292,32 +275,50 @@ export default function ChapterEditorPage() {
         .map(w => `【${w.title}】\n${w.description}`)
         .join('\n\n');
 
-      // 챕터별 씬 개요 정보 구성
-      const sceneOutlineInfo = currentChapter.sceneOutline && currentChapter.sceneOutline.length > 0
-        ? currentChapter.sceneOutline.map((scene: string, idx: number) => `  씬${idx + 1}: ${scene}`).join('\n')
-        : null;
+      // 모든 씬을 순차적으로 생성
+      const scenes = currentChapter.scenes.sort((a, b) => a.order - b.order);
+      let previousSceneContent = ''; // 직전 씬의 내용 (마지막 부분)
+      let totalGenerated = 0;
 
-      // 목표 글자수에 도달할 때까지 반복 생성
-      while (currentText.length < targetLength && iteration < maxIterations) {
-        iteration++;
-        const currentLength = currentText.length; // 공백 포함 글자수
-        const remainingLength = targetLength - currentLength;
-        const progress = Math.round((currentLength / targetLength) * 100);
+      for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+        const scene = scenes[sceneIndex];
+        const isFirstScene = sceneIndex === 0;
+        const isLastScene = sceneIndex === scenes.length - 1;
 
-        console.log(`[자동집필] ${iteration}회차 - 현재: ${currentLength.toLocaleString()}자 / 목표: ${targetLength.toLocaleString()}자 (${progress}%)`);
+        // 씬의 목표 글자수 (notes에서 파싱하거나 기본값 20000자)
+        // notes 형식: "목표: 15,000자\n필수 포함: ..."
+        let sceneTargetLength = 20000; // 기본 2만자
+        const notesMatch = scene.goal?.match(/목표[:\s]*([0-9,]+)/);
+        if (notesMatch) {
+          sceneTargetLength = parseInt(notesMatch[1].replace(/,/g, ''), 10);
+        }
 
-        // 첫 생성인지 이어쓰기인지에 따라 프롬프트 조정
-        const isFirstGeneration = currentLength < 500;
-        const recentContent = currentText.slice(-3000); // 최근 3000자 참조 (맥락 유지)
+        // 씬의 목표/설정 가져오기
+        const sceneGoal = scene.goal || scene.summary || '';
+        const sceneNotes = scene.conflict || '';
 
-        // 현재 진행 상황에 따른 씬 가이드
-        const totalScenes = currentChapter.sceneOutline?.length || 5;
-        const currentSceneIdx = Math.floor((progress / 100) * totalScenes);
-        const currentSceneGuide = sceneOutlineInfo
-          ? `현재 작성해야 할 씬: ${currentChapter.sceneOutline?.[currentSceneIdx] || '클라이맥스 또는 마무리'}`
-          : '';
+        console.log(`[자동집필] 씬 ${sceneIndex + 1}/${scenes.length} 시작: ${scene.title} (목표: ${sceneTargetLength.toLocaleString()}자)`);
 
-        const prompt = `당신은 한국의 베스트셀러 소설가입니다. 상업적으로 성공할 수준의 출판용 소설 원고를 작성합니다.
+        let sceneContent = scene.content || '';
+        let iteration = 0;
+        const maxIterations = Math.ceil(sceneTargetLength / 4000) + 5; // 안전 여유분
+
+        // 목표 글자수까지 반복 생성
+        while (sceneContent.length < sceneTargetLength && iteration < maxIterations) {
+          iteration++;
+          const currentLength = sceneContent.length;
+          const remainingLength = sceneTargetLength - currentLength;
+          const progress = Math.round((currentLength / sceneTargetLength) * 100);
+          const isFirstGeneration = currentLength < 500;
+
+          // 이전 내용 (직전 씬 + 현재 씬)
+          const contextContent = isFirstGeneration
+            ? previousSceneContent.slice(-2000)
+            : sceneContent.slice(-2500);
+
+          console.log(`[자동집필] 씬 ${sceneIndex + 1} - ${iteration}회차: ${currentLength.toLocaleString()}/${sceneTargetLength.toLocaleString()}자 (${progress}%)`);
+
+          const prompt = `당신은 한국의 베스트셀러 소설가입니다. 상업적으로 성공할 수준의 출판용 소설 원고를 작성합니다.
 
 [작품 정보]
 제목: ${currentProject.title}
@@ -325,122 +326,153 @@ export default function ChapterEditorPage() {
 분위기: ${currentProject.settings?.tone || '몰입감 있는'}
 
 [시놉시스]
-${currentProject.synopsis}
+${currentProject.synopsis || currentProject.logline || ''}
 
-${currentProject.detailedSynopsis ? `[상세 시놉시스]\n${currentProject.detailedSynopsis}\n` : ''}
 [세계관 설정]
 ${worldInfo || '현대 배경'}
 
-[등장인물 상세]
+[등장인물]
 ${characterInfo || '주인공 중심 스토리'}
 
 [현재 챕터: ${currentChapter.number}장 - ${currentChapter.title}]
 목적: ${currentChapter.purpose || '스토리 전개'}
-주요 사건: ${currentChapter.keyEvents?.join(', ') || '없음'}
-감정톤: ${currentChapter.emotionalTone || '긴장과 기대'}
-${currentChapter.characters && currentChapter.characters.length > 0 ? `등장인물: ${currentChapter.characters.join(', ')}` : ''}
 
-${sceneOutlineInfo ? `[이 챕터의 씬 구성]\n${sceneOutlineInfo}\n\n${currentSceneGuide}` : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[현재 씬: ${scene.order}번 - ${scene.title}]
+- 장소: ${scene.location || '미정'}
+- 시간: ${scene.timeOfDay || '미정'}
+- 등장인물: ${scene.participants?.join(', ') || '미정'}
+${sceneGoal ? `- 씬 목표: ${sceneGoal}` : ''}
+${sceneNotes ? `- 갈등/긴장: ${sceneNotes}` : ''}
+- 진행: ${currentLength.toLocaleString()}/${sceneTargetLength.toLocaleString()}자 (${progress}%)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[진행 상황]
-현재 ${currentLength.toLocaleString()}자 작성됨 (목표: ${targetLength.toLocaleString()}자, ${progress}% 완료)
-남은 분량: 약 ${remainingLength.toLocaleString()}자
+${contextContent ? `[이전 내용 - 반드시 이어서 작성]
+"""
+${contextContent}
+"""
+` : ''}
 
-${isFirstGeneration ? `[지시사항 - 챕터 시작]
-이 챕터의 시작 부분을 작성하세요.
-- 독자를 단번에 사로잡는 강렬한 도입부
-- 장면 묘사로 시작하거나 인물의 행동으로 시작
-- 전 챕터와의 연결성 고려
-- 이 챕터의 핵심 갈등/사건을 암시` : `[이전 내용 - 반드시 이어서 작성]
-${recentContent}
-
-[지시사항 - 이어쓰기]
-위 내용 바로 다음부터 자연스럽게 이어서 작성하세요.
+[지시사항]
+${isFirstGeneration && isFirstScene
+  ? `이것은 ${currentChapter.number}장의 첫 씬입니다.
+- 독자를 사로잡는 강렬한 도입
+- 챕터의 핵심 갈등을 암시
+- 장면/행동으로 시작 (설명 금지)`
+  : isFirstGeneration
+  ? `이것은 새로운 씬의 시작입니다.
+- 직전 씬의 내용에서 자연스럽게 이어지도록
+- 장면 전환을 자연스럽게 처리`
+  : `위 내용 바로 다음부터 자연스럽게 이어서 작성하세요.
 - 앞 내용을 반복하거나 요약하지 마세요
-- 스토리를 계속 전개하세요
-- 인물 간 갈등과 감정을 깊이 있게 표현
-- 대화와 지문의 균형 유지
-- 복선과 암시 활용`}
+- 스토리를 계속 전개하세요`}
+
+${isLastScene && remainingLength < 8000
+  ? `\n- 이것은 이 챕터의 마지막 씬입니다
+- 챕터를 마무리하되 다음 챕터로의 궁금증을 남기세요`
+  : ''}
 
 [분량 - 매우 중요!]
-이번에 최소 5000자 이상 작성하세요. 가능한 많이 작성하세요.
+이번에 최소 5000자 이상 작성하세요.
+남은 분량: ${remainingLength.toLocaleString()}자
 절대 짧게 끊지 마세요. 장면을 충분히 전개하세요.
 
 [한국 소설책 형식 - 필수]
 - 문단 시작: 전각 공백(　)으로 들여쓰기
-- 대화문: "대사" 형식, 따옴표 안에 공백 없이
-- 지문: 대사 직후 같은 줄 또는 바로 다음 줄
-- 장면 전환시에만 빈 줄 하나 사용
+- 대화문: "대사" 형식
+- 장면 전환시에만 빈 줄 사용
 - 모든 문장은 마침표로 종료
-- **강조** 같은 마크다운 사용 금지
-
-[품질 체크리스트]
-✓ 생생한 오감 묘사 (시각, 청각, 촉각 등)
-✓ 인물의 내면 심리 묘사
-✓ 자연스러운 대화 (각 인물 말투 반영)
-✓ 장면 전환의 자연스러운 흐름
-✓ 긴장감과 몰입감 유지
+- 마크다운 사용 금지
 
 본문만 출력하세요.`;
 
-        try {
-          const response = await generateText(settings.geminiApiKey, prompt, {
-            temperature: 0.85,
-            maxTokens: 8192,
-          });
+          try {
+            const response = await generateText(settings.geminiApiKey, prompt, {
+              temperature: 0.85,
+              maxTokens: 8192,
+            });
 
-          const formattedResponse = formatNovelText(response);
+            let formattedResponse = formatNovelText(response);
 
-          // 첫 생성이면 그대로, 아니면 이어붙이기
-          if (isFirstGeneration && currentText.trim().length === 0) {
-            currentText = formattedResponse;
-          } else {
-            currentText = currentText + '\n' + formattedResponse;
+            // 중복 감지 및 제거
+            if (!isFirstGeneration && sceneContent.length > 500) {
+              // 기존 내용의 마지막 500자에서 중복 체크
+              const lastPart = sceneContent.slice(-500);
+
+              // 새 응답의 첫 부분이 기존 내용과 겹치는지 확인
+              for (let checkLen = Math.min(300, formattedResponse.length); checkLen >= 50; checkLen -= 10) {
+                const checkPart = formattedResponse.slice(0, checkLen);
+                if (lastPart.includes(checkPart)) {
+                  // 중복 발견 - 중복 부분 제거
+                  const overlapIndex = lastPart.indexOf(checkPart);
+                  const overlapLength = 500 - overlapIndex;
+                  formattedResponse = formattedResponse.slice(overlapLength);
+                  console.log(`[자동집필] 중복 ${overlapLength}자 제거`);
+                  break;
+                }
+              }
+
+              // 문장 단위로도 중복 체크 (같은 문장으로 시작하면 제거)
+              const lastSentences = sceneContent.slice(-1000).split(/[.!?]\s+/).slice(-3);
+              const newFirstSentence = formattedResponse.split(/[.!?]\s+/)[0];
+              if (lastSentences.some(s => s.length > 20 && newFirstSentence.includes(s.slice(0, 30)))) {
+                // 첫 문장이 중복이면 스킵
+                const firstPeriod = formattedResponse.search(/[.!?]\s+/);
+                if (firstPeriod > 0) {
+                  formattedResponse = formattedResponse.slice(firstPeriod + 2);
+                  console.log(`[자동집필] 중복 문장 제거`);
+                }
+              }
+            }
+
+            // 이어붙이기
+            if (isFirstGeneration && sceneContent.trim().length === 0) {
+              sceneContent = formattedResponse;
+            } else if (formattedResponse.trim().length > 100) {
+              // 최소 100자 이상일 때만 추가 (중복 제거 후 너무 짧으면 스킵)
+              sceneContent = sceneContent + '\n' + formattedResponse;
+            }
+
+            // 중간 저장 (3회마다)
+            if (iteration % 3 === 0) {
+              await updateScene(scene.id, { content: sceneContent });
+            }
+
+            // 현재 씬이면 UI 업데이트
+            if (currentScene?.id === scene.id) {
+              setContent(sceneContent);
+            }
+
+            // API 호출 간격
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+          } catch (apiError) {
+            console.error(`[자동집필] 씬 ${sceneIndex + 1} - ${iteration}회차 실패:`, apiError);
+            await new Promise(resolve => setTimeout(resolve, 5000));
           }
+        }
 
-          consecutiveErrors = 0; // 성공하면 에러 카운트 리셋
+        // 씬 최종 저장
+        await updateScene(scene.id, { content: sceneContent });
+        totalGenerated += sceneContent.length;
 
-          // 중간 저장 및 UI 업데이트 (5회마다 저장으로 최적화)
-          setContent(currentText);
-          if (currentScene && iteration % 3 === 0) {
-            await updateScene(currentScene.id, { content: currentText });
-            setLastSaved(new Date());
-          }
+        // 다음 씬을 위해 현재 씬 내용 저장
+        previousSceneContent = sceneContent;
 
-          // API 호출 간격 (rate limit 방지) - 대용량이므로 1.5초
-          await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log(`[자동집필] 씬 ${sceneIndex + 1} 완료: ${sceneContent.length.toLocaleString()}자 (${iteration}회 생성)`);
 
-        } catch (apiError) {
-          consecutiveErrors++;
-          console.error(`[자동집필] API 오류 (${consecutiveErrors}회):`, apiError);
-
-          if (consecutiveErrors >= 3) {
-            throw new Error('연속 3회 API 오류 발생. 잠시 후 다시 시도해주세요.');
-          }
-
-          // 오류 시 더 긴 대기
-          await new Promise(resolve => setTimeout(resolve, 5000));
+        // 씬 간 대기
+        if (sceneIndex < scenes.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
-      // 최종 저장
-      if (currentScene) {
-        await updateScene(currentScene.id, { content: currentText });
-        setLastSaved(new Date());
-      }
-
-      const finalLength = currentText.length;
-      console.log(`[자동집필] 완료! 총 ${iteration}회 생성, 최종 ${finalLength.toLocaleString()}자 (공백 포함)`);
-      alert(`집필 완료! ${finalLength.toLocaleString()}자 생성됨`);
+      console.log(`[자동집필] 완료! 총 ${scenes.length}개 씬, ${totalGenerated.toLocaleString()}자 생성`);
+      alert(`집필 완료! ${scenes.length}개 씬, 총 ${totalGenerated.toLocaleString()}자 생성됨`);
 
     } catch (error) {
       console.error('자동 집필 실패:', error);
-      // 오류 발생해도 현재까지 작성된 내용은 저장
-      if (currentScene && currentText.length > 0) {
-        await updateScene(currentScene.id, { content: currentText });
-        setLastSaved(new Date());
-      }
-      alert(`자동 집필 중 오류가 발생했습니다. 현재까지 ${currentText.length.toLocaleString()}자 저장됨.`);
+      alert('자동 집필 중 오류가 발생했습니다.');
     } finally {
       setIsAutoWriting(false);
     }

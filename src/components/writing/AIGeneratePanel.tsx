@@ -27,12 +27,14 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useVolumeStore } from '@/stores/volumeStore';
 import { useWorldStore } from '@/stores/worldStore';
+import { usePlotStore } from '@/stores/plotStore';
+import { useCharacterStore } from '@/stores/characterStore';
 import { generateText } from '@/lib/gemini';
 import {
   generateVolumePrompt,
   generateScenePrompt,
   generateContinuePrompt,
-  generateSystemPrompt,
+  generateQuickPrompt,
 } from '@/lib/promptGenerator';
 import { Chapter, Scene, Character, VolumeStructure, SceneStructure, WritingStyle } from '@/types';
 
@@ -91,6 +93,8 @@ export function AIGeneratePanel({
   const { currentProject } = useProjectStore();
   const { volumes, currentVolume, currentScene, setCurrentVolume, setCurrentScene, validateVolumeEndPoints, updateWordCount, getVolumeProgress } = useVolumeStore();
   const { settings: worldSettings } = useWorldStore();
+  const { plotStructure, foreshadowings, conflicts } = usePlotStore();
+  const { characters: allCharacters } = useCharacterStore();
 
   // 탭 모드: 'quick' = 기존 빠른 생성, 'structured' = 권/씬 기반 구조화 생성
   const [activeTab, setActiveTab] = useState<'quick' | 'structured'>('quick');
@@ -159,59 +163,47 @@ export function AIGeneratePanel({
     setGeneratedContent('');
 
     try {
-      const selectedChars = characters.filter((c) => selectedCharacters.includes(c.id));
-      const characterInfo = selectedChars
-        .map(
-          (c) => `
-- ${c.name} (${c.role}): ${c.personality}
-  말투: 경어 ${c.speechPattern.formalityLevel}/5, ${c.speechPattern.tone || '보통'}`
-        )
-        .join('\n');
+      // 프로젝트 캐릭터 가져오기
+      const projectCharacters = allCharacters.filter(c => c.projectId === projectId);
+      const charsToUse = projectCharacters.length > 0 ? projectCharacters : characters;
 
-      const lastParagraphs = currentContent
-        .split('</p>')
-        .slice(-3)
-        .join('</p>')
-        .replace(/<[^>]*>/g, '')
-        .trim();
+      // 프로젝트 세계관, 복선, 갈등 가져오기
+      const worldSettingsArray = worldSettings ? Object.values(worldSettings).flat() : [];
+      const projectForeshadowings = foreshadowings.filter(f => f.projectId === projectId);
+      const projectConflicts = conflicts.filter(c => c.projectId === projectId);
 
-      let typeSpecificPrompt = '';
-      switch (generationType) {
-        case 'continue':
-          typeSpecificPrompt = '현재 내용에서 자연스럽게 이어지도록 다음 장면을 작성해주세요.';
-          break;
-        case 'dialogue':
-          typeSpecificPrompt = `등장인물들 간의 대화를 작성해주세요. 각 캐릭터의 말투와 성격이 드러나야 합니다.
-대화 형식: 큰따옴표로 대사를 감싸고, 필요시 지문을 추가합니다.`;
-          break;
-        case 'description':
-          typeSpecificPrompt = '장면의 분위기, 배경, 인물의 감정이나 외양을 생생하게 묘사해주세요.';
-          break;
-        case 'action':
-          typeSpecificPrompt = '역동적이고 긴장감 있는 액션 장면을 작성해주세요. 동작과 움직임을 구체적으로 묘사합니다.';
-          break;
-        case 'rewrite':
-          typeSpecificPrompt = '마지막 부분을 다른 관점이나 표현으로 다시 작성해주세요.';
-          break;
-        case 'expand':
-          typeSpecificPrompt = '마지막 부분을 더 풍부하고 상세하게 확장해주세요.';
-          break;
-      }
-
-      const prompt = `당신은 한국의 베스트셀러 소설가입니다.
+      // 새로운 generateQuickPrompt 사용 (모든 기획 데이터 포함)
+      const prompt = currentProject
+        ? generateQuickPrompt(
+            currentProject,
+            charsToUse,
+            worldSettingsArray,
+            plotStructure,
+            projectForeshadowings,
+            projectConflicts,
+            {
+              generationType,
+              tone: toneOptions.find((t) => t.value === tone)?.label || '중립적',
+              targetLength: length[0],
+              currentContent,
+              customPrompt: customPrompt || undefined,
+              selectedCharacterIds: selectedCharacters.length > 0 ? selectedCharacters : undefined,
+              sceneSetting: {
+                title: scene.title,
+                location: scene.location || '미정',
+                timeframe: '미정',
+              },
+            }
+          )
+        : `당신은 한국의 베스트셀러 소설가입니다.
 
 [작품 정보]
-제목: ${currentProject?.title || '제목 없음'}
-장르: ${currentProject?.genre?.join(', ') || '일반'}
+장르: 일반
 
-[챕터] ${chapter.title}
 [씬] ${scene.title} / 장소: ${scene.location || '미정'}
 
-[등장인물]
-${characterInfo || '등장인물 정보 없음'}
-
 [현재 내용]
-${lastParagraphs || '(시작 부분)'}
+${currentContent.replace(/<[^>]*>/g, '').slice(-500) || '(시작 부분)'}
 
 [요청]
 - 유형: ${generationTypes.find((t) => t.value === generationType)?.label}
@@ -219,22 +211,10 @@ ${lastParagraphs || '(시작 부분)'}
 - 분량: ${length[0]}자 이상
 ${customPrompt ? `- 추가: ${customPrompt}` : ''}
 
-[지시사항]
-${typeSpecificPrompt}
-
-[한국 소설책 형식 - 필수]
-실제 출판되는 한국 소설책처럼 작성하세요:
+한국 소설책 형식으로 작성하세요.
 - 문단 시작: 들여쓰기 한 칸
-- 대화문: "대사" 형식, 따옴표 안에 불필요한 공백 금지
-- 지문: 대사 뒤에 바로 붙이거나 다음 줄에 작성
-- 장면 전환시에만 빈 줄 사용 (문단마다 빈 줄 넣지 않음)
+- 대화문: "대사" 형식
 - 모든 문장은 마침표로 종료
-- 특수문자(*, #, -, =) 금지
-
-[예시]
-　그녀는 창가에 서서 멍하니 밖을 바라보았다. 하늘에는 붉은 노을이 번지고 있었다.
-　"뭘 그렇게 보고 있어?" 뒤에서 그의 목소리가 들려왔다.
-　그녀는 고개를 돌렸다. "그냥, 노을이 예뻐서." 그녀는 미소를 지으며 대답했다.
 
 본문만 출력하세요.`;
 
@@ -377,28 +357,43 @@ ${typeSpecificPrompt}
       let promptResult;
       const worldSettingsArray = worldSettings ? Object.values(worldSettings).flat() : [];
 
+      // 프로젝트의 캐릭터 필터링 (props로 받은 characters 또는 스토어에서)
+      const projectCharacters = allCharacters.filter(c => c.projectId === projectId);
+      const charsToUse = projectCharacters.length > 0 ? projectCharacters : characters;
+
+      // 프로젝트의 복선/갈등 필터링
+      const projectForeshadowings = foreshadowings.filter(f => f.projectId === projectId);
+      const projectConflicts = conflicts.filter(c => c.projectId === projectId);
+
       if (structuredMode === 'volume') {
-        // 권 전체 생성
+        // 권 전체 생성 - 모든 기획 데이터 포함
         promptResult = generateVolumePrompt(
           currentProject,
           selectedVolume,
           writingStyle,
-          characters,
+          charsToUse,
           worldSettingsArray,
+          plotStructure,
+          projectForeshadowings,
+          projectConflicts,
           previousContent || undefined
         );
       } else if (structuredMode === 'scene' && selectedScene) {
-        // 씬 단위 생성
+        // 씬 단위 생성 - 모든 기획 데이터 포함
         promptResult = generateScenePrompt(
           currentProject,
           selectedVolume,
           selectedScene,
           writingStyle,
-          characters,
+          charsToUse,
+          worldSettingsArray,
+          plotStructure,
+          projectForeshadowings,
+          projectConflicts,
           previousContent || undefined
         );
       } else if (structuredMode === 'continue' && selectedScene) {
-        // 이어쓰기
+        // 이어쓰기 - 복선/갈등 포함
         const remainingMustInclude = selectedScene.mustInclude.filter(
           item => !currentContent.includes(item)
         );
@@ -407,9 +402,12 @@ ${typeSpecificPrompt}
           selectedVolume,
           selectedScene,
           writingStyle,
+          charsToUse,
           currentContent,
           currentContent.replace(/<[^>]*>/g, '').length,
-          remainingMustInclude
+          remainingMustInclude,
+          projectForeshadowings,
+          projectConflicts
         );
       } else {
         throw new Error('올바른 생성 모드를 선택해주세요.');

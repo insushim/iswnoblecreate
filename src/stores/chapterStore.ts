@@ -41,7 +41,7 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
   error: null,
 
   fetchChapters: async (projectId: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, currentChapter: null, currentScene: null });
     try {
       const chapters = await db.chapters
         .where('projectId')
