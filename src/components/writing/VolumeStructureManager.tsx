@@ -64,6 +64,9 @@ import {
 import { useVolumeStore } from '@/stores/volumeStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useCharacterStore } from '@/stores/characterStore';
+import { useWorldStore } from '@/stores/worldStore';
+import { usePlotStore } from '@/stores/plotStore';
 import { generateJSON } from '@/lib/gemini';
 import type { VolumeStructure, SceneStructure } from '@/types';
 
@@ -94,6 +97,14 @@ export function VolumeStructureManager({
 
   const { currentProject } = useProjectStore();
   const { settings } = useSettingsStore();
+  const { characters } = useCharacterStore();
+  const { worldSettings } = useWorldStore();
+  const { plotStructure } = usePlotStore();
+
+  // 프로젝트 관련 데이터 필터링
+  const projectCharacters = characters.filter(c => c.projectId === projectId);
+  const projectWorldSettings = worldSettings.filter(w => w.projectId === projectId);
+  const projectPlotPoints = plotStructure?.plotPoints || [];
 
   const [isAddVolumeOpen, setIsAddVolumeOpen] = useState(false);
   const [isAddSceneOpen, setIsAddSceneOpen] = useState(false);
@@ -139,7 +150,7 @@ export function VolumeStructureManager({
     setIsDeleteAllOpen(false);
   };
 
-  // AI 권 구조 자동 생성 (기존 전체 삭제 후 새로 생성)
+  // AI 권 구조 자동 생성 (기존 전체 삭제 후 새로 생성, 씬 포함)
   const handleAutoGenerateVolumes = async () => {
     if (!settings?.geminiApiKey || !currentProject) return;
 
@@ -154,38 +165,88 @@ export function VolumeStructureManager({
       const avgVolumeWordCount = 195000; // 권당 평균 19.5만자
       const suggestedVolumeCount = Math.ceil(totalWordCount / avgVolumeWordCount);
 
-      const prompt = `다음 소설 정보를 바탕으로 권별 구조를 JSON 배열로 생성해주세요.
+      // 캐릭터 정보 요약
+      const mainCharacters = projectCharacters.filter(c => c.role === 'protagonist' || c.role === 'antagonist');
+      const supportCharacters = projectCharacters.filter(c => c.role === 'supporting' || c.role === 'deuteragonist');
+      const characterSummary = mainCharacters.length > 0
+        ? mainCharacters.map(c => `- ${c.name} (${c.role === 'protagonist' ? '주인공' : '적대자'}): ${c.background?.slice(0, 100) || c.personality?.slice(0, 100) || '설명 없음'}`).join('\n')
+        : '캐릭터 미설정';
+
+      // 세계관 정보 요약
+      const coreWorldSettings = projectWorldSettings.filter(w => w.importance === 'core');
+      const worldSummary = coreWorldSettings.length > 0
+        ? coreWorldSettings.map(w => `- ${w.title}: ${w.description?.slice(0, 80) || ''}`).join('\n')
+        : '세계관 미설정';
+
+      // 플롯 정보 요약
+      const sortedPlotPoints = [...projectPlotPoints].sort((a, b) => a.order - b.order);
+      const plotSummary = sortedPlotPoints.length > 0
+        ? sortedPlotPoints.slice(0, 10).map(p => `${p.order}. ${p.title}: ${p.description?.slice(0, 60) || ''}`).join('\n')
+        : '플롯 미설정';
+
+      const prompt = `다음 소설의 모든 기획을 바탕으로 권별 구조와 씬을 JSON 배열로 생성해주세요.
 
 ## 작품 정보
 - 제목: ${currentProject.title}
 - 장르: ${currentProject.genre.join(', ')}
 - 컨셉: ${currentProject.concept}
 - 시놉시스: ${currentProject.synopsis}
+- 상세 시놉시스: ${currentProject.detailedSynopsis || '없음'}
 - 목표 글자수: ${(totalWordCount / 10000).toFixed(0)}만자
 - 예상 권수: ${suggestedVolumeCount}권
 
-## 요청
-총 ${Math.min(suggestedVolumeCount, 22)}권의 구조를 처음부터 생성해주세요.
+## 주요 캐릭터
+${characterSummary}
+${supportCharacters.length > 0 ? '\n조연: ' + supportCharacters.map(c => c.name).join(', ') : ''}
 
-각 권은 19-20만자 분량입니다.
-종료점은 반드시 구체적인 대사나 행동으로 명시해야 합니다.
-모호한 표현(성장한다, 변화한다, 깨닫는다) 대신 구체적인 장면을 제시하세요.
+## 핵심 세계관
+${worldSummary}
+
+## 플롯 포인트
+${plotSummary}
+
+## 요청
+총 ${Math.min(suggestedVolumeCount, 22)}권의 구조를 생성해주세요.
+각 권에는 8-12개의 씬을 포함해주세요.
+
+규칙:
+1. 각 권은 19-20만자 분량 (각 씬은 1.5-2만자)
+2. 종료점은 반드시 구체적인 대사나 행동으로 명시
+3. 모호한 표현(성장한다, 변화한다, 깨닫는다) 대신 구체적인 장면 제시
+4. 플롯 포인트를 적절히 배분
+5. 캐릭터의 성장 아크 반영
 
 JSON 형식:
 [
   {
     "volumeNumber": 1,
-    "title": "권 제목",
+    "title": "권 제목 (부제 포함)",
     "targetWordCount": 195000,
     "startPoint": "이 권이 시작되는 구체적인 상황",
     "coreEvent": "이 권의 핵심 사건/갈등",
     "endPoint": "이 권이 끝나는 구체적인 장면 설명",
     "endPointType": "dialogue",
-    "endPointExact": "정확한 종료 대사 또는 행동"
+    "endPointExact": "정확한 종료 대사 또는 행동 (큰따옴표로 대사 표현)",
+    "scenes": [
+      {
+        "sceneNumber": 1,
+        "title": "씬 제목",
+        "targetWordCount": 18000,
+        "pov": "시점 인물 이름",
+        "povType": "third-limited",
+        "location": "장소",
+        "timeframe": "시간대",
+        "startCondition": "씬 시작 상황",
+        "mustInclude": ["필수 포함 내용1", "필수 포함 내용2"],
+        "endCondition": "씬 종료 조건 (구체적 대사/행동)",
+        "endConditionType": "dialogue"
+      }
+    ]
   }
 ]
 
-endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(장면)`;
+endPointType/endConditionType: dialogue(대사), action(행동), narration(서술), scene(장면)
+povType: first(1인칭), third-limited(3인칭 제한), omniscient(전지적)`;
 
       const result = await generateJSON<Array<{
         volumeNumber: number;
@@ -196,11 +257,25 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
         endPoint: string;
         endPointType: 'dialogue' | 'action' | 'narration' | 'scene';
         endPointExact: string;
-      }>>(settings.geminiApiKey, prompt, { temperature: 0.8 });
+        scenes: Array<{
+          sceneNumber: number;
+          title: string;
+          targetWordCount: number;
+          pov: string;
+          povType: 'first' | 'third-limited' | 'omniscient';
+          location: string;
+          timeframe: string;
+          startCondition: string;
+          mustInclude: string[];
+          endCondition: string;
+          endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
+        }>;
+      }>>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 32000 });
 
+      // 생성된 권과 씬 저장
       for (let i = 0; i < result.length; i++) {
         const vol = result[i];
-        await createVolume(projectId, {
+        const newVolume = await createVolume(projectId, {
           volumeNumber: i + 1,
           title: vol.title,
           targetWordCount: vol.targetWordCount || 195000,
@@ -211,6 +286,27 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
           endPointExact: vol.endPointExact,
           status: 'planning',
         });
+
+        // 씬 생성
+        if (newVolume && vol.scenes && vol.scenes.length > 0) {
+          for (let j = 0; j < vol.scenes.length; j++) {
+            const scene = vol.scenes[j];
+            await createScene(newVolume.id, {
+              sceneNumber: j + 1,
+              title: scene.title,
+              targetWordCount: scene.targetWordCount || 18000,
+              pov: scene.pov || '',
+              povType: scene.povType || 'third-limited',
+              location: scene.location || '',
+              timeframe: scene.timeframe || '',
+              startCondition: scene.startCondition || '',
+              mustInclude: scene.mustInclude || [],
+              endCondition: scene.endCondition || '',
+              endConditionType: scene.endConditionType || 'scene',
+              status: 'pending',
+            });
+          }
+        }
       }
 
       await fetchVolumes(projectId);
@@ -222,7 +318,7 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
     }
   };
 
-  // 단일 권 재생성
+  // 단일 권 재생성 (씬 포함)
   const handleRegenerateVolume = async (volumeId: string) => {
     if (!settings?.geminiApiKey || !currentProject) return;
 
@@ -231,17 +327,31 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
 
     setRegeneratingVolumeId(volumeId);
     try {
+      // 기존 씬 삭제
+      for (const scene of volume.scenes) {
+        await deleteScene(scene.id);
+      }
+
       // 이전 권과 다음 권 정보 가져오기
       const prevVolume = projectVolumes.find(v => v.volumeNumber === volume.volumeNumber - 1);
       const nextVolume = projectVolumes.find(v => v.volumeNumber === volume.volumeNumber + 1);
 
-      const prompt = `다음 소설의 ${volume.volumeNumber}권 구조를 재생성해주세요.
+      // 캐릭터 정보 요약
+      const mainCharacters = projectCharacters.filter(c => c.role === 'protagonist' || c.role === 'antagonist');
+      const characterSummary = mainCharacters.length > 0
+        ? mainCharacters.map(c => `- ${c.name}: ${c.background?.slice(0, 80) || c.personality?.slice(0, 80) || ''}`).join('\n')
+        : '캐릭터 미설정';
+
+      const prompt = `다음 소설의 ${volume.volumeNumber}권 구조와 씬을 재생성해주세요.
 
 ## 작품 정보
 - 제목: ${currentProject.title}
 - 장르: ${currentProject.genre.join(', ')}
 - 컨셉: ${currentProject.concept}
 - 시놉시스: ${currentProject.synopsis}
+
+## 주요 캐릭터
+${characterSummary}
 
 ## 이전 권 (${volume.volumeNumber - 1}권)
 ${prevVolume
@@ -257,11 +367,13 @@ ${nextVolume
   : '없음 (마지막 권)'}
 
 ## 요청
-${volume.volumeNumber}권의 구조를 재생성해주세요.
+${volume.volumeNumber}권의 구조와 8-12개의 씬을 재생성해주세요.
 이전 권의 종료점에서 자연스럽게 이어지고, 다음 권의 시작점으로 연결되어야 합니다.
 
-종료점은 반드시 구체적인 대사나 행동으로 명시해야 합니다.
-모호한 표현(성장한다, 변화한다, 깨닫는다) 대신 구체적인 장면을 제시하세요.
+규칙:
+1. 권은 19-20만자 분량 (각 씬은 1.5-2만자)
+2. 종료점은 반드시 구체적인 대사나 행동으로 명시
+3. 모호한 표현 대신 구체적인 장면 제시
 
 JSON 형식 (단일 객체):
 {
@@ -271,10 +383,25 @@ JSON 형식 (단일 객체):
   "coreEvent": "이 권의 핵심 사건/갈등",
   "endPoint": "이 권이 끝나는 구체적인 장면 설명",
   "endPointType": "dialogue",
-  "endPointExact": "정확한 종료 대사 또는 행동"
+  "endPointExact": "정확한 종료 대사 또는 행동",
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "title": "씬 제목",
+      "targetWordCount": 18000,
+      "pov": "시점 인물 이름",
+      "povType": "third-limited",
+      "location": "장소",
+      "timeframe": "시간대",
+      "startCondition": "씬 시작 상황",
+      "mustInclude": ["필수 포함 내용1", "필수 포함 내용2"],
+      "endCondition": "씬 종료 조건",
+      "endConditionType": "dialogue"
+    }
+  ]
 }
 
-endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(장면)`;
+endPointType/endConditionType: dialogue(대사), action(행동), narration(서술), scene(장면)`;
 
       const result = await generateJSON<{
         title: string;
@@ -284,7 +411,20 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
         endPoint: string;
         endPointType: 'dialogue' | 'action' | 'narration' | 'scene';
         endPointExact: string;
-      }>(settings.geminiApiKey, prompt, { temperature: 0.8 });
+        scenes: Array<{
+          sceneNumber: number;
+          title: string;
+          targetWordCount: number;
+          pov: string;
+          povType: 'first' | 'third-limited' | 'omniscient';
+          location: string;
+          timeframe: string;
+          startCondition: string;
+          mustInclude: string[];
+          endCondition: string;
+          endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
+        }>;
+      }>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 16000 });
 
       await updateVolume(volumeId, {
         title: result.title,
@@ -295,6 +435,27 @@ endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(
         endPointType: result.endPointType || 'dialogue',
         endPointExact: result.endPointExact,
       });
+
+      // 씬 생성
+      if (result.scenes && result.scenes.length > 0) {
+        for (let j = 0; j < result.scenes.length; j++) {
+          const scene = result.scenes[j];
+          await createScene(volumeId, {
+            sceneNumber: j + 1,
+            title: scene.title,
+            targetWordCount: scene.targetWordCount || 18000,
+            pov: scene.pov || '',
+            povType: scene.povType || 'third-limited',
+            location: scene.location || '',
+            timeframe: scene.timeframe || '',
+            startCondition: scene.startCondition || '',
+            mustInclude: scene.mustInclude || [],
+            endCondition: scene.endCondition || '',
+            endConditionType: scene.endConditionType || 'scene',
+            status: 'pending',
+          });
+        }
+      }
 
       await fetchVolumes(projectId);
     } catch (error) {
