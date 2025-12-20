@@ -23,6 +23,8 @@ import {
   Wand2,
   Copy,
   MoreVertical,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +62,9 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { useVolumeStore } from '@/stores/volumeStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { generateJSON } from '@/lib/gemini';
 import type { VolumeStructure, SceneStructure } from '@/types';
 
 interface VolumeStructureManagerProps {
@@ -87,10 +92,14 @@ export function VolumeStructureManager({
     getProjectProgress,
   } = useVolumeStore();
 
+  const { currentProject } = useProjectStore();
+  const { settings } = useSettingsStore();
+
   const [isAddVolumeOpen, setIsAddVolumeOpen] = useState(false);
   const [isAddSceneOpen, setIsAddSceneOpen] = useState(false);
   const [selectedVolumeForScene, setSelectedVolumeForScene] = useState<string | null>(null);
   const [expandedVolumes, setExpandedVolumes] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // 프로젝트 권 목록 가져오기
   const projectVolumes = volumes.filter(v => v.projectId === projectId);
@@ -120,6 +129,96 @@ export function VolumeStructureManager({
     );
   };
 
+  // AI 권 구조 자동 생성
+  const handleAutoGenerateVolumes = async () => {
+    if (!settings?.geminiApiKey || !currentProject) return;
+
+    setIsGenerating(true);
+    try {
+      const totalWordCount = currentProject.settings?.targetTotalLength || 4300000; // 기본 430만자
+      const avgVolumeWordCount = 195000; // 권당 평균 19.5만자
+      const suggestedVolumeCount = Math.ceil(totalWordCount / avgVolumeWordCount);
+
+      const prompt = `다음 소설 정보를 바탕으로 권별 구조를 JSON 배열로 생성해주세요.
+
+## 작품 정보
+- 제목: ${currentProject.title}
+- 장르: ${currentProject.genre.join(', ')}
+- 컨셉: ${currentProject.concept}
+- 시놉시스: ${currentProject.synopsis}
+- 목표 글자수: ${(totalWordCount / 10000).toFixed(0)}만자
+- 예상 권수: ${suggestedVolumeCount}권
+
+## 기존 권 구조
+${projectVolumes.length > 0
+  ? projectVolumes.map(v => `- ${v.volumeNumber}권: ${v.title} (${v.startPoint || '시작점 미설정'} → ${v.endPoint || '종료점 미설정'})`).join('\n')
+  : '없음 (새로 생성 필요)'}
+
+## 요청
+${projectVolumes.length > 0
+  ? '기존 권에 이어서 추가할 권 3개를 생성해주세요.'
+  : `총 ${Math.min(suggestedVolumeCount, 22)}권의 구조를 생성해주세요.`}
+
+각 권은 19-20만자 분량입니다.
+종료점은 반드시 구체적인 대사나 행동으로 명시해야 합니다.
+모호한 표현(성장한다, 변화한다, 깨닫는다) 대신 구체적인 장면을 제시하세요.
+
+JSON 형식:
+[
+  {
+    "volumeNumber": 1,
+    "title": "권 제목",
+    "targetWordCount": 195000,
+    "startPoint": "이 권이 시작되는 구체적인 상황",
+    "coreEvent": "이 권의 핵심 사건/갈등",
+    "endPoint": "이 권이 끝나는 구체적인 장면 설명",
+    "endPointType": "dialogue",
+    "endPointExact": "정확한 종료 대사 또는 행동"
+  }
+]
+
+endPointType 선택: dialogue(대사), action(행동), narration(서술), scene(장면)`;
+
+      const result = await generateJSON<Array<{
+        volumeNumber: number;
+        title: string;
+        targetWordCount: number;
+        startPoint: string;
+        coreEvent: string;
+        endPoint: string;
+        endPointType: 'dialogue' | 'action' | 'narration' | 'scene';
+        endPointExact: string;
+      }>>(settings.geminiApiKey, prompt, { temperature: 0.8 });
+
+      // 기존 권 번호 이후부터 시작
+      const startNumber = projectVolumes.length > 0
+        ? Math.max(...projectVolumes.map(v => v.volumeNumber)) + 1
+        : 1;
+
+      for (let i = 0; i < result.length; i++) {
+        const vol = result[i];
+        await createVolume(projectId, {
+          volumeNumber: startNumber + i,
+          title: vol.title,
+          targetWordCount: vol.targetWordCount || 195000,
+          startPoint: vol.startPoint,
+          coreEvent: vol.coreEvent,
+          endPoint: vol.endPoint,
+          endPointType: vol.endPointType || 'dialogue',
+          endPointExact: vol.endPointExact,
+          status: 'planning',
+        });
+      }
+
+      await fetchVolumes(projectId);
+    } catch (error) {
+      console.error('권 구조 생성 실패:', error);
+      alert('권 구조 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 헤더 */}
@@ -130,10 +229,21 @@ export function VolumeStructureManager({
             정확한 분량과 종료점을 설정하여 체계적으로 집필하세요
           </p>
         </div>
-        <Button onClick={() => setIsAddVolumeOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          권 추가
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="default"
+            className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+            onClick={handleAutoGenerateVolumes}
+            disabled={isGenerating || !settings?.geminiApiKey}
+          >
+            {isGenerating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            AI 재생성
+          </Button>
+          <Button variant="outline" onClick={() => setIsAddVolumeOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            권 추가
+          </Button>
+        </div>
       </div>
 
       {/* 전체 진행 상황 */}
