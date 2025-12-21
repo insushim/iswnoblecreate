@@ -746,3 +746,132 @@ export interface ProjectWritingProgress {
   volumes: VolumeProgress[];
   overallPercentage: number;
 }
+
+// ============================================
+// 캐릭터 일관성 관리 시스템
+// ============================================
+
+// 캐릭터 상태 추적 (생존/죽음/부상/상태변화)
+export interface CharacterStatus {
+  characterId: string;
+  characterName: string;
+  status: 'alive' | 'dead' | 'missing' | 'imprisoned' | 'injured' | 'transformed';
+  statusChangedAt?: string; // 어느 장면/권에서 상태가 변경되었는지
+  statusChangeDescription?: string; // 상태 변경 설명
+  lastSeenAt?: string; // 마지막으로 등장한 장면
+  currentLocation?: string; // 현재 위치
+  notes?: string; // 추가 메모
+}
+
+// 캐릭터 등장 기록
+export interface CharacterAppearance {
+  characterId: string;
+  characterName: string;
+  sceneId?: string;
+  chapterId?: string;
+  volumeNumber?: number;
+  location: string;
+  action: string; // 무엇을 했는지
+  dialogue?: string; // 대표 대사
+  emotionalState?: string; // 감정 상태
+  timestamp: Date;
+}
+
+// 캐릭터 일관성 규칙
+export interface CharacterConsistencyRule {
+  id: string;
+  characterId: string;
+  characterName: string;
+  ruleType: 'status' | 'location' | 'knowledge' | 'relationship' | 'trait' | 'speech' | 'ability';
+  rule: string; // 규칙 설명
+  effectiveFrom?: string; // 언제부터 적용되는지 (장면/권)
+  effectiveUntil?: string; // 언제까지 적용되는지
+  priority: 'critical' | 'major' | 'minor';
+  isActive: boolean;
+  createdAt: Date;
+}
+
+// 캐릭터 일관성 검증 결과
+export interface CharacterConsistencyCheck {
+  isConsistent: boolean;
+  violations: CharacterConsistencyViolation[];
+  warnings: CharacterConsistencyWarning[];
+  suggestions: string[];
+}
+
+// 일관성 위반
+export interface CharacterConsistencyViolation {
+  id: string;
+  characterId: string;
+  characterName: string;
+  violationType: 'dead_character_appears' | 'wrong_location' | 'knowledge_inconsistency' |
+                 'relationship_mismatch' | 'trait_contradiction' | 'speech_pattern_break' |
+                 'ability_inconsistency' | 'timeline_error';
+  description: string;
+  severity: 'critical' | 'major' | 'minor';
+  location: {
+    sceneId?: string;
+    chapterId?: string;
+    volumeNumber?: number;
+    textPosition?: number;
+  };
+  suggestedFix?: string;
+  relatedRule?: string;
+}
+
+// 일관성 경고
+export interface CharacterConsistencyWarning {
+  characterId: string;
+  characterName: string;
+  warningType: 'potential_inconsistency' | 'missing_context' | 'ambiguous_status' | 'long_absence';
+  description: string;
+  suggestion?: string;
+}
+
+// 캐릭터 지식 상태 (누가 무엇을 알고 있는지)
+export interface CharacterKnowledge {
+  characterId: string;
+  characterName: string;
+  knowledgeItems: KnowledgeItem[];
+}
+
+export interface KnowledgeItem {
+  id: string;
+  topic: string; // 무엇에 대한 지식
+  description: string; // 구체적 내용
+  learnedAt?: string; // 어디서 알게 되었는지
+  learnedFrom?: string; // 누구에게서 알게 되었는지
+  isSecret: boolean; // 비밀 정보인지
+  canShareWith?: string[]; // 공유 가능한 캐릭터 ID
+}
+
+// 캐릭터 일관성 컨텍스트 (집필 시 참조용)
+export interface CharacterConsistencyContext {
+  projectId: string;
+  characters: CharacterStatus[];
+  rules: CharacterConsistencyRule[];
+  appearances: CharacterAppearance[];
+  knowledge: CharacterKnowledge[];
+  lastUpdated: Date;
+}
+
+// 자동 추출된 캐릭터 정보 (기존 소설에서)
+export interface ExtractedCharacterInfo {
+  name: string;
+  aliases: string[];
+  role: string;
+  status: 'alive' | 'dead' | 'unknown';
+  statusChangeLocation?: string;
+  appearances: {
+    location: string;
+    context: string;
+  }[];
+  relationships: {
+    targetName: string;
+    type: string;
+    description: string;
+  }[];
+  traits: string[];
+  speechPatterns: string[];
+  keyEvents: string[];
+}

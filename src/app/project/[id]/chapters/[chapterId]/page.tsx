@@ -54,6 +54,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { NovelEditor } from '@/components/writing/NovelEditor';
 import { AIGeneratePanel } from '@/components/writing/AIGeneratePanel';
+import { CharacterStatusTracker } from '@/components/writing/CharacterStatusTracker';
 import { LoadingSpinner, AIThinking } from '@/components/common';
 import { useChapterStore } from '@/stores/chapterStore';
 import { useCharacterStore } from '@/stores/characterStore';
@@ -824,6 +825,22 @@ ${isLastScene && remainingLength < 8000
               currentContent={content}
               onGenerate={handleContentGenerated}
               onClose={() => setShowAIPanel(false)}
+            />
+          </div>
+        )}
+
+        {/* 캐릭터 상태 추적 패널 */}
+        {!showAIPanel && characters.length > 0 && (
+          <div className="w-72 border-l bg-background overflow-y-auto hidden lg:block">
+            <CharacterStatusTracker
+              projectId={projectId}
+              characters={characters}
+              currentContent={content}
+              currentSceneId={currentScene?.id}
+              currentVolumeNumber={currentChapter.number}
+              onViolationDetected={(violations) => {
+                console.log('일관성 위반 감지:', violations);
+              }}
             />
           </div>
         )}

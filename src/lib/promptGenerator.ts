@@ -17,7 +17,14 @@ import type {
   Subplot,
   Foreshadowing,
   Conflict,
+  CharacterConsistencyContext,
 } from '@/types';
+
+import {
+  generateCharacterStatusSummary,
+  generateConsistencyInstructions,
+  validateCharacterConsistency,
+} from './characterConsistency';
 
 // ============================================
 // 컨텍스트 데이터 타입 정의
@@ -30,6 +37,7 @@ export interface FullContext {
   plotStructure: PlotStructure | null;
   foreshadowings: Foreshadowing[];
   conflicts: Conflict[];
+  consistencyContext?: CharacterConsistencyContext;
 }
 
 // ============================================
@@ -423,7 +431,10 @@ ${style.additionalInstructions ? `- 추가 지시: ${style.additionalInstruction
 6. 한국어로 작성한다
 7. 캐릭터의 말투와 성격을 일관되게 유지한다
 8. 복선은 자연스럽게 심는다 (노골적으로 드러내지 않는다)
-9. 갈등의 강도를 적절히 조절한다`;
+9. 갈등의 강도를 적절히 조절한다
+10. ⚠️ 사망한 캐릭터는 절대 현재 시점에서 행동/대화하지 않는다 (회상/언급만 가능)
+11. ⚠️ 감금된 캐릭터는 해당 장소에서만 등장 가능
+12. ⚠️ 캐릭터 상태 변화(사망, 감금, 부상 등)는 명확히 표시해야 한다`;
 }
 
 // ============================================
@@ -439,7 +450,8 @@ export function generateVolumePrompt(
   plotStructure: PlotStructure | null,
   foreshadowings: Foreshadowing[],
   conflicts: Conflict[],
-  previousVolumeSummary?: string
+  previousVolumeSummary?: string,
+  consistencyContext?: CharacterConsistencyContext
 ): GeneratedPrompt {
   const systemPrompt = generateSystemPrompt(project, style);
 
@@ -474,8 +486,16 @@ export function generateVolumePrompt(
     })
     .join('\n');
 
+  // 캐릭터 일관성 정보 생성
+  const consistencyInfo = consistencyContext
+    ? generateCharacterStatusSummary(consistencyContext, characters) +
+      generateConsistencyInstructions(consistencyContext)
+    : '';
+
   const userPrompt = `## 현재 집필: ${volume.volumeNumber}권 "${volume.title}"
 목표 글자수: ${volume.targetWordCount.toLocaleString()}자
+
+${consistencyInfo}
 
 ## ⚠️ 절대 규칙 - 종료점
 이 권은 반드시 다음 조건에서 끝나야 합니다:
@@ -555,7 +575,8 @@ export function generateScenePrompt(
   plotStructure: PlotStructure | null,
   foreshadowings: Foreshadowing[],
   conflicts: Conflict[],
-  previousSceneSummary?: string
+  previousSceneSummary?: string,
+  consistencyContext?: CharacterConsistencyContext
 ): GeneratedPrompt {
   const systemPrompt = generateSystemPrompt(project, style);
 
@@ -595,10 +616,17 @@ export function generateScenePrompt(
     'omniscient': '전지적',
   };
 
+  // 캐릭터 일관성 정보 생성
+  const consistencyInfo = consistencyContext
+    ? generateConsistencyInstructions(consistencyContext)
+    : '';
+
   const userPrompt = `## 현재 집필 정보
 - 작품: ${project.title} ${volume.volumeNumber}권
 - 현재 씬: ${scene.sceneNumber}번 "${scene.title}"
 - 목표 글자수: ${scene.targetWordCount.toLocaleString()}자
+
+${consistencyInfo}
 
 ## 씬 설정
 - 시점(POV): ${scene.pov} (${povTypeMap[scene.povType] || '3인칭 제한'})
