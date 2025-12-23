@@ -226,7 +226,7 @@ export function CharacterProfile({ character, onEdit, onInterview }: CharacterPr
             <p className="text-sm text-muted-foreground mb-1">입버릇</p>
             <div className="flex flex-wrap gap-2">
               {character.speechPattern.catchphrase.map((c) => (
-                <Badge key={c} variant="outline">"{c}"</Badge>
+                <Badge key={c} variant="outline">&quot;{c}&quot;</Badge>
               ))}
             </div>
           </div>

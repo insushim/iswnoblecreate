@@ -593,7 +593,7 @@ export function CharacterForm({ projectId, character, onSuccess }: CharacterForm
             <div className="flex flex-wrap gap-2">
               {catchphrase.map((c) => (
                 <Badge key={c} variant="secondary" className="cursor-pointer" onClick={() => handleRemoveItem(c, catchphrase, setCatchphrase)}>
-                  "{c}" <X className="h-3 w-3 ml-1" />
+                  &quot;{c}&quot; <X className="h-3 w-3 ml-1" />
                 </Badge>
               ))}
             </div>

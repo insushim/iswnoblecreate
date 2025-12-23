@@ -821,7 +821,7 @@ function VolumeCard({
                 <p className="text-sm mt-1">{volume.endPoint || '설정되지 않음'}</p>
                 {volume.endPointExact && (
                   <p className="text-sm mt-2 p-2 bg-background rounded border">
-                    정확한 종료: "{volume.endPointExact}"
+                    정확한 종료: &quot;{volume.endPointExact}&quot;
                   </p>
                 )}
               </div>

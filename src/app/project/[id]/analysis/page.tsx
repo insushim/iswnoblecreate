@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -19,8 +19,6 @@ import {
   Clock,
   ThumbsUp,
   ThumbsDown,
-  ChevronDown,
-  ChevronUp,
   History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,8 +26,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -43,14 +39,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { EmptyState, LoadingSpinner, AIThinking } from '@/components/common';
+import { EmptyState } from '@/components/common';
 import { useAnalysisStore } from '@/stores/analysisStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useChapterStore } from '@/stores/chapterStore';
 import { useCharacterStore } from '@/stores/characterStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { generateJSON, generateText } from '@/lib/gemini';
-import { Analysis, Chapter, Suggestion, ConsistencyIssue } from '@/types';
+import { generateJSON } from '@/lib/gemini';
+import { Suggestion, ConsistencyIssue } from '@/types';
 
 const priorityColors: Record<Suggestion['priority'], string> = {
   high: 'text-destructive border-destructive',
@@ -80,7 +76,7 @@ export default function AnalysisPage() {
   const params = useParams();
   const projectId = params.id as string;
 
-  const { currentProject } = useProjectStore();
+  useProjectStore();
   const { chapters, fetchChapters } = useChapterStore();
   const { characters, fetchCharacters } = useCharacterStore();
   const { settings } = useSettingsStore();
@@ -514,7 +510,7 @@ ${characterInfo}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">보여주기 vs 말하기</CardTitle>
-                    <CardDescription>Show don't tell 비율</CardDescription>
+                    <CardDescription>Show don&apos;t tell 비율</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-4">
@@ -849,7 +845,7 @@ ${characterInfo}
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2 flex-wrap">
-                  {analyses.map((analysis, index) => (
+                  {analyses.map((analysis) => (
                     <Button
                       key={analysis.id}
                       variant={currentAnalysis?.id === analysis.id ? 'default' : 'outline'}

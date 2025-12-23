@@ -1,20 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import {
   Save,
-  Wand2,
   RefreshCw,
   ChevronLeft,
-  Settings,
-  Eye,
   Maximize2,
   Minimize2,
-  History,
   Sparkles,
-  MessageSquare,
   Rocket,
   Loader2,
   Download,
@@ -23,15 +17,6 @@ import {
   File,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
 import {
   Select,
   SelectContent,
@@ -47,25 +32,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { NovelEditor } from '@/components/writing/NovelEditor';
 import { AIGeneratePanel } from '@/components/writing/AIGeneratePanel';
 import { CharacterStatusTracker } from '@/components/writing/CharacterStatusTracker';
-import { LoadingSpinner, AIThinking } from '@/components/common';
+import { LoadingSpinner } from '@/components/common';
 import { useChapterStore } from '@/stores/chapterStore';
 import { useCharacterStore } from '@/stores/characterStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorldStore } from '@/stores/worldStore';
-import { useUIStore } from '@/stores/uiStore';
 import { generateText } from '@/lib/gemini';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
-import { Chapter, Scene } from '@/types';
+import { Chapter } from '@/types';
 
 const statusOptions: { value: Chapter['status']; label: string }[] = [
   { value: 'outline', label: '개요' },
@@ -86,7 +65,6 @@ export default function ChapterEditorPage() {
   const { currentProject, fetchProject } = useProjectStore();
   const { settings } = useSettingsStore();
   const { worldSettings, fetchWorldSettings } = useWorldStore();
-  const { writingMode, setWritingMode } = useUIStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -96,6 +74,8 @@ export default function ChapterEditorPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAutoWriting, setIsAutoWriting] = useState(false);
   const [selectedText, setSelectedText] = useState('');
+
+  const contentRef = useRef(content);
 
   useEffect(() => {
     const loadData = async () => {
@@ -123,6 +103,31 @@ export default function ChapterEditorPage() {
     }
   }, [currentScene]);
 
+  const handleSave = useCallback(async () => {
+    if (!currentScene) return;
+
+    setIsSaving(true);
+    try {
+      await updateScene(currentScene.id, { content: contentRef.current });
+      setLastSaved(new Date());
+
+      // 버전 저장 (5분마다)
+      const lastVersion = currentScene.versions[currentScene.versions.length - 1];
+      if (!lastVersion || new Date().getTime() - new Date(lastVersion.createdAt).getTime() > 300000) {
+        await saveSceneVersion(currentScene.id, contentRef.current, 'auto');
+      }
+    } catch (error) {
+      console.error('저장 실패:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentScene, updateScene, saveSceneVersion]);
+
+  // content가 변경될 때마다 ref 업데이트
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
   // 자동 저장
   useEffect(() => {
     if (!currentScene || content === currentScene.content) return;
@@ -132,27 +137,7 @@ export default function ChapterEditorPage() {
     }, 30000); // 30초마다 자동 저장
 
     return () => clearTimeout(timer);
-  }, [content, currentScene]);
-
-  const handleSave = async () => {
-    if (!currentScene) return;
-
-    setIsSaving(true);
-    try {
-      await updateScene(currentScene.id, { content });
-      setLastSaved(new Date());
-
-      // 버전 저장 (5분마다)
-      const lastVersion = currentScene.versions[currentScene.versions.length - 1];
-      if (!lastVersion || new Date().getTime() - new Date(lastVersion.createdAt).getTime() > 300000) {
-        await saveSceneVersion(currentScene.id, content, 'auto');
-      }
-    } catch (error) {
-      console.error('저장 실패:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  }, [content, currentScene, handleSave]);
 
   const handleCreateScene = async () => {
     if (!currentChapter) return;
