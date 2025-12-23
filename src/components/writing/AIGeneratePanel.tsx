@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Wand2, X, RefreshCw, Sparkles, MessageSquare, BookOpen, Lightbulb, Target, Copy, CheckCircle, AlertTriangle, Layers, Play } from 'lucide-react';
+import { Wand2, X, RefreshCw, Sparkles, MessageSquare, BookOpen, Lightbulb, Target, Copy, CheckCircle, AlertTriangle, Layers, Play, Type, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -44,7 +44,10 @@ interface AIGeneratePanelProps {
   scene: Scene;
   characters: Character[];
   currentContent: string;
+  selectedText?: string;
   onGenerate: (content: string) => void;
+  onReplaceSelection?: (content: string) => void;
+  onReplaceScene?: (sceneId: string, content: string) => void;
   onClose: () => void;
 }
 
@@ -86,7 +89,10 @@ export function AIGeneratePanel({
   scene,
   characters,
   currentContent,
+  selectedText,
   onGenerate,
+  onReplaceSelection,
+  onReplaceScene,
   onClose,
 }: AIGeneratePanelProps) {
   const { settings } = useSettingsStore();
@@ -96,8 +102,15 @@ export function AIGeneratePanel({
   const { plotStructure, foreshadowings, conflicts } = usePlotStore();
   const { characters: allCharacters } = useCharacterStore();
 
-  // 탭 모드: 'quick' = 기존 빠른 생성, 'structured' = 권/씬 기반 구조화 생성
-  const [activeTab, setActiveTab] = useState<'quick' | 'structured'>('quick');
+  // 탭 모드: 'quick' = 기존 빠른 생성, 'selection' = 선택 부분 재생성, 'scene' = 씬 전체 재생성, 'structured' = 권/씬 기반 구조화 생성
+  const [activeTab, setActiveTab] = useState<'quick' | 'selection' | 'scene' | 'structured'>(
+    selectedText ? 'selection' : 'quick'
+  );
+
+  // 씬 재생성용 상태
+  const [sceneToRegenerate, setSceneToRegenerate] = useState<string>(scene?.id || '');
+  const [sceneRegeneratePrompt, setSceneRegeneratePrompt] = useState('');
+  const [selectionRegeneratePrompt, setSelectionRegeneratePrompt] = useState('');
 
   const [generationType, setGenerationType] = useState<GenerationType>('continue');
   const [customPrompt, setCustomPrompt] = useState('');
@@ -326,6 +339,187 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
     }
   };
 
+  // 선택 부분 재생성
+  const handleSelectionRegenerate = async () => {
+    if (!settings?.geminiApiKey) {
+      setError('설정에서 Gemini API 키를 먼저 등록해주세요.');
+      return;
+    }
+
+    if (!selectedText || selectedText.trim().length === 0) {
+      setError('재생성할 텍스트를 선택해주세요.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError('');
+    setGeneratedContent('');
+
+    try {
+      // 선택된 텍스트 앞뒤 컨텍스트 추출
+      const selectionIndex = currentContent.indexOf(selectedText);
+      const beforeContext = selectionIndex > 0 ? currentContent.slice(Math.max(0, selectionIndex - 500), selectionIndex) : '';
+      const afterContext = currentContent.slice(selectionIndex + selectedText.length, selectionIndex + selectedText.length + 500);
+
+      const prompt = `당신은 한국의 베스트셀러 소설가입니다.
+
+[작품 정보]
+제목: ${currentProject?.title || '소설'}
+장르: ${currentProject?.genre?.join(', ') || '일반'}
+
+[현재 씬]
+${scene.title} / 장소: ${scene.location || '미정'}
+
+[앞 문맥]
+${beforeContext || '(시작 부분)'}
+
+[재생성할 부분 - 원본]
+"""
+${selectedText}
+"""
+
+[뒤 문맥]
+${afterContext || '(끝 부분)'}
+
+[추가 지시]
+${selectionRegeneratePrompt || '같은 내용을 더 자연스럽고 생생하게 다시 작성해주세요.'}
+
+[요청]
+위의 "재생성할 부분"을 다시 작성해주세요.
+- 앞뒤 문맥과 자연스럽게 연결되어야 합니다
+- 원본의 핵심 내용/의미는 유지하되 표현을 개선해주세요
+- 분량은 원본과 비슷하게 (${selectedText.length}자 내외)
+
+[한국 소설책 형식]
+- 문단 시작: 전각 공백(　)으로 들여쓰기
+- 대화문: "대사" 형식
+- 모든 문장은 마침표로 종료
+
+재생성된 부분만 출력하세요. 앞뒤 문맥은 출력하지 마세요.`;
+
+      const response = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.85,
+        maxTokens: Math.max(500, selectedText.length * 2),
+      });
+
+      const formattedContent = formatNovelText(response);
+      setGeneratedContent(formattedContent);
+    } catch (err: unknown) {
+      console.error('[AIGeneratePanel] 선택 부분 재생성 실패:', err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('재생성에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 선택 부분 적용
+  const handleApplySelection = () => {
+    if (generatedContent && onReplaceSelection) {
+      onReplaceSelection(generatedContent);
+      setGeneratedContent('');
+    }
+  };
+
+  // 씬 전체 재생성
+  const handleSceneRegenerate = async () => {
+    if (!settings?.geminiApiKey) {
+      setError('설정에서 Gemini API 키를 먼저 등록해주세요.');
+      return;
+    }
+
+    const targetScene = chapter.scenes?.find(s => s.id === sceneToRegenerate);
+    if (!targetScene) {
+      setError('재생성할 씬을 선택해주세요.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError('');
+    setGeneratedContent('');
+
+    try {
+      // 이전 씬 내용 가져오기 (컨텍스트용)
+      const sceneIndex = chapter.scenes?.findIndex(s => s.id === sceneToRegenerate) || 0;
+      const previousScene = sceneIndex > 0 ? chapter.scenes?.[sceneIndex - 1] : null;
+      const previousContent = previousScene?.content?.slice(-1000) || '';
+
+      // 캐릭터 정보
+      const characterInfo = characters
+        .slice(0, 5)
+        .map(c => `[${c.name}] ${c.role} - ${c.personality}`)
+        .join('\n');
+
+      const prompt = `당신은 한국의 베스트셀러 소설가입니다.
+
+[작품 정보]
+제목: ${currentProject?.title || '소설'}
+장르: ${currentProject?.genre?.join(', ') || '일반'}
+시놉시스: ${currentProject?.synopsis || currentProject?.logline || ''}
+
+[등장인물]
+${characterInfo || '주인공 중심'}
+
+[챕터 ${chapter.number}장: ${chapter.title}]
+
+[재생성할 씬: ${targetScene.title}]
+- 장소: ${targetScene.location || '미정'}
+- 시간: ${targetScene.timeOfDay || '미정'}
+- 등장인물: ${targetScene.participants?.join(', ') || '미정'}
+- 씬 목표: ${targetScene.goal || targetScene.summary || '스토리 전개'}
+- 갈등/긴장: ${targetScene.conflict || ''}
+
+${previousContent ? `[이전 씬 마지막 부분 - 이어서 작성]
+"""
+${previousContent}
+"""
+` : ''}
+
+[추가 지시]
+${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
+
+[분량]
+최소 3000자 이상, 씬의 내용을 충분히 전개해주세요.
+
+[한국 소설책 형식]
+- 문단 시작: 전각 공백(　)으로 들여쓰기
+- 대화문: "대사" 형식
+- 장면 전환시에만 빈 줄 사용
+- 모든 문장은 마침표로 종료
+- 마크다운 사용 금지
+
+본문만 출력하세요.`;
+
+      const response = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.85,
+        maxTokens: 8192,
+      });
+
+      const formattedContent = formatNovelText(response);
+      setGeneratedContent(formattedContent);
+    } catch (err: unknown) {
+      console.error('[AIGeneratePanel] 씬 재생성 실패:', err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('씬 재생성에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 씬 재생성 적용
+  const handleApplySceneRegenerate = () => {
+    if (generatedContent && onReplaceScene && sceneToRegenerate) {
+      onReplaceScene(sceneToRegenerate, generatedContent);
+      setGeneratedContent('');
+    }
+  };
+
   // 구조화된 집필 생성 (권/씬 기반)
   const handleStructuredGenerate = async () => {
     if (!settings?.geminiApiKey) {
@@ -523,17 +717,25 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
         </Button>
       </div>
 
-      {/* 탭 선택: 빠른 생성 vs 구조화 생성 */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'quick' | 'structured')} className="flex-1 flex flex-col">
+      {/* 탭 선택 */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'quick' | 'selection' | 'scene' | 'structured')} className="flex-1 flex flex-col">
         <div className="px-4 pt-2">
-          <TabsList className="w-full grid grid-cols-2">
-            <TabsTrigger value="quick" className="gap-2">
-              <Sparkles className="h-4 w-4" />
+          <TabsList className="w-full grid grid-cols-4">
+            <TabsTrigger value="quick" className="gap-1 text-xs px-2">
+              <Sparkles className="h-3 w-3" />
               빠른 생성
             </TabsTrigger>
-            <TabsTrigger value="structured" className="gap-2">
-              <Layers className="h-4 w-4" />
-              구조화 집필
+            <TabsTrigger value="selection" className="gap-1 text-xs px-2">
+              <Type className="h-3 w-3" />
+              선택 재생성
+            </TabsTrigger>
+            <TabsTrigger value="scene" className="gap-1 text-xs px-2">
+              <FileText className="h-3 w-3" />
+              씬 재생성
+            </TabsTrigger>
+            <TabsTrigger value="structured" className="gap-1 text-xs px-2">
+              <Layers className="h-3 w-3" />
+              구조화
             </TabsTrigger>
           </TabsList>
         </div>
@@ -666,6 +868,202 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
                     </Button>
                     <Button className="flex-1" onClick={handleApply}>
                       적용하기
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
+        {/* 선택 부분 재생성 탭 */}
+        <TabsContent value="selection" className="flex-1 mt-0">
+          <ScrollArea className="h-full">
+            <div className="p-4 space-y-6">
+              {/* 선택된 텍스트 표시 */}
+              <div className="space-y-2">
+                <Label>선택된 텍스트</Label>
+                {selectedText ? (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 max-h-40 overflow-y-auto">
+                    <p className="text-sm whitespace-pre-wrap">{selectedText}</p>
+                    <p className="text-xs text-muted-foreground mt-2">{selectedText.length}자 선택됨</p>
+                  </div>
+                ) : (
+                  <Alert>
+                    <Type className="h-4 w-4" />
+                    <AlertTitle>텍스트를 선택해주세요</AlertTitle>
+                    <AlertDescription>
+                      에디터에서 재생성하고 싶은 부분을 드래그해서 선택하세요.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* 재생성 지시 */}
+              <div className="space-y-2">
+                <Label>재생성 지시 (선택)</Label>
+                <Textarea
+                  value={selectionRegeneratePrompt}
+                  onChange={(e) => setSelectionRegeneratePrompt(e.target.value)}
+                  placeholder="예: 더 긴장감 있게, 대화를 추가해서, 묘사를 더 풍부하게..."
+                  rows={2}
+                />
+              </div>
+
+              {/* 재생성 버튼 */}
+              <Button
+                className="w-full gap-2"
+                onClick={handleSelectionRegenerate}
+                disabled={isGenerating || !settings?.geminiApiKey || !selectedText}
+              >
+                {isGenerating ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    재생성 중...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    선택 부분 재생성
+                  </>
+                )}
+              </Button>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+
+              {/* 생성된 내용 */}
+              {generatedContent && (
+                <div className="space-y-3">
+                  <Label>재생성된 내용</Label>
+                  <div className="p-4 rounded-lg bg-muted/50 border max-h-60 overflow-y-auto">
+                    <p className="text-sm whitespace-pre-wrap">{generatedContent}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={handleSelectionRegenerate}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      다시 생성
+                    </Button>
+                    <Button className="flex-1" onClick={handleApplySelection} disabled={!onReplaceSelection}>
+                      선택 부분 교체
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
+        {/* 씬 전체 재생성 탭 */}
+        <TabsContent value="scene" className="flex-1 mt-0">
+          <ScrollArea className="h-full">
+            <div className="p-4 space-y-6">
+              {/* 씬 선택 */}
+              <div className="space-y-2">
+                <Label>재생성할 씬 선택</Label>
+                {chapter.scenes && chapter.scenes.length > 0 ? (
+                  <Select value={sceneToRegenerate} onValueChange={setSceneToRegenerate}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="씬을 선택하세요" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {chapter.scenes.map((sc, index) => (
+                        <SelectItem key={sc.id} value={sc.id}>
+                          씬 {index + 1}: {sc.title || `씬 ${index + 1}`} ({sc.wordCount.toLocaleString()}자)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Alert>
+                    <FileText className="h-4 w-4" />
+                    <AlertTitle>씬이 없습니다</AlertTitle>
+                    <AlertDescription>
+                      먼저 씬을 생성해주세요.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* 선택된 씬 정보 */}
+              {sceneToRegenerate && chapter.scenes && (
+                <Card className="bg-muted/30">
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      선택된 씬 정보
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-2 space-y-1 text-xs">
+                    {(() => {
+                      const selectedSceneData = chapter.scenes.find(s => s.id === sceneToRegenerate);
+                      if (!selectedSceneData) return null;
+                      return (
+                        <>
+                          <div><strong>제목:</strong> {selectedSceneData.title}</div>
+                          <div><strong>장소:</strong> {selectedSceneData.location || '미정'}</div>
+                          <div><strong>현재 분량:</strong> {selectedSceneData.wordCount.toLocaleString()}자</div>
+                          {selectedSceneData.goal && <div><strong>목표:</strong> {selectedSceneData.goal}</div>}
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 재생성 지시 */}
+              <div className="space-y-2">
+                <Label>재생성 지시 (선택)</Label>
+                <Textarea
+                  value={sceneRegeneratePrompt}
+                  onChange={(e) => setSceneRegeneratePrompt(e.target.value)}
+                  placeholder="예: 전투 장면을 더 역동적으로, 감정 묘사를 강화해서, 대화를 늘려서..."
+                  rows={3}
+                />
+              </div>
+
+              {/* 재생성 버튼 */}
+              <Button
+                className="w-full gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                onClick={handleSceneRegenerate}
+                disabled={isGenerating || !settings?.geminiApiKey || !sceneToRegenerate}
+              >
+                {isGenerating ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    씬 재생성 중...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    씬 전체 재생성
+                  </>
+                )}
+              </Button>
+
+              <p className="text-xs text-muted-foreground">
+                ⚠️ 씬 전체 재생성은 기존 내용을 완전히 대체합니다.
+              </p>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+
+              {/* 생성된 내용 */}
+              {generatedContent && (
+                <div className="space-y-3">
+                  <Label>재생성된 씬 내용</Label>
+                  <div className="p-4 rounded-lg bg-muted/50 border max-h-60 overflow-y-auto">
+                    <p className="text-sm whitespace-pre-wrap">{generatedContent}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={handleSceneRegenerate}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      다시 생성
+                    </Button>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                      onClick={handleApplySceneRegenerate}
+                      disabled={!onReplaceScene}
+                    >
+                      씬 교체 적용
                     </Button>
                   </div>
                 </div>

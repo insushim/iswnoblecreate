@@ -95,6 +95,7 @@ export default function ChapterEditorPage() {
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAutoWriting, setIsAutoWriting] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -171,6 +172,41 @@ export default function ChapterEditorPage() {
     setContent((prev) => prev + '\n\n' + generatedContent);
     setShowAIPanel(false);
   };
+
+  // 선택 부분 교체 핸들러
+  const handleReplaceSelection = (newContent: string) => {
+    if (selectedText && content.includes(selectedText)) {
+      setContent(content.replace(selectedText, newContent));
+      setSelectedText('');
+      setShowAIPanel(false);
+    }
+  };
+
+  // 씬 전체 교체 핸들러
+  const handleReplaceScene = async (sceneId: string, newContent: string) => {
+    try {
+      await updateScene(sceneId, { content: newContent });
+      // 현재 씬이면 UI도 업데이트
+      if (currentScene?.id === sceneId) {
+        setContent(newContent);
+      }
+      setShowAIPanel(false);
+    } catch (error) {
+      console.error('씬 교체 실패:', error);
+    }
+  };
+
+  // 텍스트 선택 핸들러
+  const handleTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      setSelectedText(selection.toString());
+      // 선택된 텍스트가 있으면 AI 패널 자동으로 열기
+      if (!showAIPanel) {
+        setShowAIPanel(true);
+      }
+    }
+  }, [showAIPanel]);
 
   // 텍스트 후처리 - 출판 형식으로 정리 (소설책 스타일)
   const formatNovelText = useCallback((text: string): string => {
@@ -797,7 +833,7 @@ ${isLastScene && remainingLength < 8000
         </div>
 
         {/* 에디터 영역 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" onMouseUp={handleTextSelection}>
           {currentScene ? (
             <NovelEditor
               content={content}
@@ -823,8 +859,14 @@ ${isLastScene && remainingLength < 8000
               scene={currentScene}
               characters={characters}
               currentContent={content}
+              selectedText={selectedText}
               onGenerate={handleContentGenerated}
-              onClose={() => setShowAIPanel(false)}
+              onReplaceSelection={handleReplaceSelection}
+              onReplaceScene={handleReplaceScene}
+              onClose={() => {
+                setShowAIPanel(false);
+                setSelectedText('');
+              }}
             />
           </div>
         )}
