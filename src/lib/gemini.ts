@@ -60,7 +60,7 @@ export async function generateText(
 
   try {
     const ai = initGemini(apiKey);
-    const modelName = 'gemini-3-pro-preview';
+    const modelName = 'gemini-2.0-flash';
     console.log('[Gemini] Creating model:', modelName);
 
     const maxOutputTokens = options?.maxTokens ?? 8192;
@@ -203,7 +203,7 @@ export async function* generateTextStream(
 
   try {
     const ai = initGemini(apiKey);
-    const modelName = 'gemini-3-pro-preview';
+    const modelName = 'gemini-2.0-flash';
     const model = ai.getGenerativeModel({
       model: modelName,
       generationConfig: {

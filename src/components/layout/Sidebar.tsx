@@ -17,6 +17,7 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
+  Scissors,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ const projectNavItems: NavItem[] = [
   { title: '캐릭터', href: '/characters', icon: Users },
   { title: '플롯', href: '/plot', icon: GitBranch },
   { title: '집필', href: '/chapters', icon: Edit3 },
+  { title: '씬 편집', href: '/scenes', icon: Scissors, badge: 'NEW' },
   { title: '분석', href: '/analysis', icon: BarChart3 },
   { title: '타임라인', href: '/timeline', icon: Clock },
   { title: '내보내기', href: '/export', icon: Download },
