@@ -41,6 +41,7 @@ import { useCharacterStore } from '@/stores/characterStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorldStore } from '@/stores/worldStore';
+import { usePlotStore } from '@/stores/plotStore';
 import { generateText } from '@/lib/gemini';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
@@ -65,6 +66,7 @@ export default function ChapterEditorPage() {
   const { currentProject, fetchProject } = useProjectStore();
   const { settings } = useSettingsStore();
   const { worldSettings, fetchWorldSettings } = useWorldStore();
+  const { plotStructure, foreshadowings, conflicts, fetchPlotStructure, fetchForeshadowings, fetchConflicts } = usePlotStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -85,11 +87,14 @@ export default function ChapterEditorPage() {
         fetchChapter(chapterId),
         fetchCharacters(projectId),
         fetchWorldSettings(projectId),
+        fetchPlotStructure(projectId),
+        fetchForeshadowings(projectId),
+        fetchConflicts(projectId),
       ]);
       setIsLoading(false);
     };
     loadData();
-  }, [chapterId, projectId, fetchProject, fetchChapter, fetchCharacters, fetchWorldSettings]);
+  }, [chapterId, projectId, fetchProject, fetchChapter, fetchCharacters, fetchWorldSettings, fetchPlotStructure, fetchForeshadowings, fetchConflicts]);
 
   useEffect(() => {
     if (currentChapter?.scenes && currentChapter.scenes.length > 0 && !currentScene) {
@@ -297,6 +302,27 @@ export default function ChapterEditorPage() {
         .map(w => `【${w.title}】\n${w.description}`)
         .join('\n\n');
 
+      // 플롯 정보 구성
+      const plotInfo = plotStructure && plotStructure.plotPoints?.length > 0 ? `
+[플롯 구조]
+${plotStructure.plotPoints.slice(0, 8).map(p => `- ${p.title}: ${p.description}`).join('\n')}
+` : '';
+
+      // 복선 정보 구성
+      const projectForeshadowings = foreshadowings.filter(f => f.projectId === projectId);
+      const foreshadowingInfo = projectForeshadowings.length > 0
+        ? `[복선 - 자연스럽게 심어주세요]\n${projectForeshadowings.slice(0, 5).map(f => `- ${f.title}: ${f.description} (${f.plantedMethod})`).join('\n')}`
+        : '';
+
+      // 갈등 정보 구성
+      const projectConflicts = conflicts.filter(c => c.projectId === projectId);
+      const conflictInfo = projectConflicts.length > 0
+        ? `[갈등 구조]\n${projectConflicts.slice(0, 5).map(c => `- ${c.title} (${c.type}): ${c.description}\n  위험: ${c.stakes}`).join('\n')}`
+        : '';
+
+      // 캐릭터 이름 목록 (제한용)
+      const characterNames = characters.map(c => c.name);
+
       // 모든 씬을 순차적으로 생성
       const scenes = currentChapter.scenes.sort((a, b) => a.order - b.order);
       let previousSceneContent = ''; // 직전 씬의 내용 (마지막 부분)
@@ -353,8 +379,15 @@ ${currentProject.synopsis || currentProject.logline || ''}
 [세계관 설정]
 ${worldInfo || '현대 배경'}
 
-[등장인물]
+[등장인물 - 이 목록에 있는 캐릭터만 등장시키세요!]
 ${characterInfo || '주인공 중심 스토리'}
+
+⚠️ 중요: 위 등장인물 목록(${characterNames.join(', ')})에 없는 캐릭터는 절대 등장시키지 마세요!
+새로운 캐릭터를 임의로 만들어내지 마세요. 이름 없는 "병사", "시녀" 등 단역은 가능합니다.
+
+${plotInfo}
+${foreshadowingInfo}
+${conflictInfo}
 
 [현재 챕터: ${currentChapter.number}장 - ${currentChapter.title}]
 목적: ${currentChapter.purpose || '스토리 전개'}
