@@ -210,7 +210,10 @@ export default function PlanningPage() {
 
 로그라인만 출력하세요. 추가 설명 없이 한 문장만 작성하세요.`;
 
-      const result = await generateText(settings.geminiApiKey, prompt, { temperature: 0.7 });
+      const result = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.7,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       setLogline(result.trim());
     } catch (error) {
       console.error('로그라인 생성 실패:', error);
@@ -245,7 +248,10 @@ export default function PlanningPage() {
 
 시놉시스만 출력하세요.`;
 
-      const result = await generateText(settings.geminiApiKey, prompt, { temperature: 0.7 });
+      const result = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.7,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       setSynopsis(result.trim());
     } catch (error) {
       console.error('시놉시스 생성 실패:', error);
@@ -278,7 +284,10 @@ export default function PlanningPage() {
 
 상세 시놉시스만 출력하세요.`;
 
-      const result = await generateText(settings.geminiApiKey, prompt, { temperature: 0.7 });
+      const result = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.7,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       setDetailedSynopsis(result.trim());
     } catch (error) {
       console.error('상세 시놉시스 생성 실패:', error);
@@ -352,7 +361,10 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
 [주인공]이/가 [상황/세계]에서 [목표]를 위해 [장애물/적대자]와 맞서 싸우며 [위험/대가]를 감수해야 한다.
 
 매력적인 로그라인 한 문장만 출력하세요.`;
-      const newLogline = await generateText(settings.geminiApiKey, loglinePrompt, { temperature: 0.7 });
+      const newLogline = await generateText(settings.geminiApiKey, loglinePrompt, {
+        temperature: 0.7,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       setLogline(newLogline.trim());
 
       // 시놉시스 생성
@@ -383,7 +395,11 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
 9. 결말 - 변화와 성장, 새로운 일상
 
 시놉시스만 출력하세요. 번호 없이 자연스러운 문장으로.`;
-      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, { temperature: 0.7, maxTokens: 6000 });
+      const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, {
+        temperature: 0.7,
+        maxTokens: 6000,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       setSynopsis(newSynopsis.trim());
 
       // 상세 시놉시스 생성
@@ -427,7 +443,11 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
 - 에필로그와 새로운 일상
 
 각 부분을 상세하게 서술해주세요. 이 기획서를 바탕으로 ${calculatedTotalLength.toLocaleString()}자의 소설이 집필됩니다.`;
-      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, { temperature: 0.7, maxTokens: 16000 });
+      const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, {
+        temperature: 0.7,
+        maxTokens: 16000,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       setDetailedSynopsis(newDetailed.trim());
 
       // 저장

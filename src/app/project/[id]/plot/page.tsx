@@ -395,7 +395,10 @@ ${characters.map(c => `- ${c.name} (${c.role}): ${c.motivation}`).join('\n')}
 
 타입: 오프닝, 촉발 사건, 1차 전환점, 미드포인트, 2차 전환점, 클라이맥스, 결말 중 선택`;
 
-      const response = await generateText(settings.geminiApiKey, prompt, { temperature: 0.8 });
+      const response = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.8,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
 
       // 결과를 파싱하여 플롯 포인트로 추가 (간단한 버전)
       const lines = response.split('\n').filter(line => line.match(/^\d+\./));

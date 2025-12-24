@@ -1,7 +1,14 @@
 /**
- * 소설 집필 프롬프트 생성 시스템
- * - 권/씬 단위로 정확한 분량과 종료점을 지키는 AI 프롬프트 생성
- * - 모든 기획 데이터(캐릭터, 세계관, 플롯, 복선, 갈등) 포함
+ * 소설 집필 프롬프트 생성 시스템 v2.0
+ *
+ * 모든 기획 데이터를 집필에 반드시 반영하는 강화된 시스템:
+ * - 권/씬 단위로 정확한 분량과 종료점
+ * - 모든 기획 데이터(캐릭터, 세계관, 플롯, 복선, 갈등) 필수 포함
+ * - 스토리 분석 기반 일관성 검증
+ * - 역사 교차검증 결과 반영
+ * - 캐릭터 상태 추적 (사망/감금 등)
+ * - 중복 내용 방지
+ * - 베스트셀러 작가 워크플로우 통합
  */
 
 import type {
@@ -26,6 +33,24 @@ import {
   validateCharacterConsistency,
 } from './characterConsistency';
 
+import {
+  StoryAnalysisResult,
+  generateAnalysisSummaryForPrompt,
+} from './storyAnalyzer';
+
+import {
+  ResearchSummary,
+  generateResearchSummaryForPrompt,
+} from './researchValidator';
+
+import {
+  DeepCharacterProfile,
+  SceneDesign,
+  SetupPayoff,
+  EmotionalArc,
+  WritingGuidelines,
+} from './professionalWorkflow';
+
 // ============================================
 // 컨텍스트 데이터 타입 정의
 // ============================================
@@ -38,6 +63,15 @@ export interface FullContext {
   foreshadowings: Foreshadowing[];
   conflicts: Conflict[];
   consistencyContext?: CharacterConsistencyContext;
+
+  // 강화된 컨텍스트 (v2.0)
+  storyAnalysis?: StoryAnalysisResult;
+  researchSummary?: ResearchSummary;
+  deepCharacterProfiles?: DeepCharacterProfile[];
+  sceneDesign?: SceneDesign;
+  setupPayoffs?: SetupPayoff[];
+  emotionalArcs?: EmotionalArc[];
+  writingGuidelines?: WritingGuidelines;
 }
 
 // ============================================
@@ -384,7 +418,13 @@ function generateConflictInfo(conflicts: Conflict[]): string {
 
 export function generateSystemPrompt(
   project: Project,
-  style: WritingStyle
+  style: WritingStyle,
+  options?: {
+    storyAnalysis?: StoryAnalysisResult;
+    researchSummary?: ResearchSummary;
+    writingGuidelines?: WritingGuidelines;
+    emotionalArc?: EmotionalArc;
+  }
 ): string {
   const perspectiveMap = {
     'first': '1인칭 시점',
@@ -404,7 +444,7 @@ export function generateSystemPrompt(
     'fast': '빠르고 긴박한',
   };
 
-  return `당신은 한국의 베스트셀러 소설가입니다. 아래 규칙을 철저히 따라 소설을 집필하세요.
+  let systemPrompt = `당신은 한국의 베스트셀러 소설가입니다. 아래 규칙을 철저히 따라 소설을 집필하세요.
 
 ## 작품 정보
 - 작품명: ${project.title}
@@ -420,21 +460,97 @@ ${project.synopsis ? `- 시놉시스: ${project.synopsis}` : ''}
 - 묘사 상세도: ${style.descriptionDetail}/10
 - 페이싱: ${pacingMap[style.pacing]}
 - 감정 강도: ${style.emotionIntensity}/10
-${style.additionalInstructions ? `- 추가 지시: ${style.additionalInstructions}` : ''}
+${style.additionalInstructions ? `- 추가 지시: ${style.additionalInstructions}` : ''}`;
 
-## 절대 규칙 ⚠️
+  // 집필 가이드라인 추가 (v2.0)
+  if (options?.writingGuidelines) {
+    const wg = options.writingGuidelines;
+    systemPrompt += `
+
+## 📝 집필 가이드라인 (기획 반영)
+### 문체
+${wg.style.toneDescriptions.map(t => `- ${t}`).join('\n')}
+- 문장 길이: ${wg.style.sentenceLength}
+- 대화 스타일: ${wg.style.dialogueStyle}
+- 묘사 깊이: ${wg.style.descriptionDepth}
+- 페이싱: ${wg.style.pacingGuidelines}
+
+### 씬 작성 규칙
+- 오프닝 훅: ${wg.sceneGuidelines.openingHook}
+- 긴장감 구축: ${wg.sceneGuidelines.tensionBuilding}
+- 대화 비율: ${wg.sceneGuidelines.dialogueBalance}
+- 클로징 훅: ${wg.sceneGuidelines.closingHook}
+
+### 금지 사항
+${wg.avoidList.map(a => `- ❌ ${a}`).join('\n')}
+
+### 필수 사항
+${wg.mustIncludeList.map(m => `- ✅ ${m}`).join('\n')}`;
+  }
+
+  // 감정선 가이드 추가
+  if (options?.emotionalArc) {
+    const ea = options.emotionalArc;
+    systemPrompt += `
+
+## 🎭 이 권의 감정선
+- 테마: ${ea.emotionalTheme}
+- 시작 분위기: ${ea.startingMood}
+- 종료 분위기: ${ea.endingMood}
+- 독자 경험 목표: ${ea.readerExperience}`;
+  }
+
+  // 역사 자료 검증 결과 추가
+  if (options?.researchSummary) {
+    systemPrompt += `
+
+## 📚 역사적 사실 (교차검증 완료)
+${generateResearchSummaryForPrompt(options.researchSummary)}`;
+  }
+
+  // 스토리 분석 결과 추가
+  if (options?.storyAnalysis) {
+    // 사망/감금 캐릭터 명시
+    const deadChars = options.storyAnalysis.characterStates.filter(c => c.status === 'dead');
+    const imprisonedChars = options.storyAnalysis.characterStates.filter(c => c.status === 'imprisoned');
+
+    if (deadChars.length > 0 || imprisonedChars.length > 0) {
+      systemPrompt += `
+
+## 🚨 캐릭터 상태 경고
+`;
+      if (deadChars.length > 0) {
+        systemPrompt += `### 💀 사망한 캐릭터 (절대 현재 시점에서 활동 불가!)
+${deadChars.map(c => `- ${c.characterName}: 사망 (${c.lastSeenVolume}권 ${c.lastSeenScene}씬) - 회상/언급만 가능`).join('\n')}
+`;
+      }
+      if (imprisonedChars.length > 0) {
+        systemPrompt += `### 🔒 감금/제한된 캐릭터
+${imprisonedChars.map(c => `- ${c.characterName}: ${c.lastSeenLocation}에서만 등장 가능`).join('\n')}
+`;
+      }
+    }
+  }
+
+  systemPrompt += `
+
+## ⚠️ 절대 규칙
 1. 주어진 종료점에 도달하면 반드시 멈춘다
 2. 종료점 이후의 내용(다음 권/씬 내용)은 절대 쓰지 않는다
-3. 같은 내용을 반복하지 않는다
+3. 같은 내용을 반복하지 않는다 (이전 씬과 유사한 장면/대사 금지)
 4. 분량이 남더라도 종료점에 도달하면 멈춘다
 5. 종료점에 도달하지 않았는데 글이 끝나면 안 된다
 6. 한국어로 작성한다
 7. 캐릭터의 말투와 성격을 일관되게 유지한다
 8. 복선은 자연스럽게 심는다 (노골적으로 드러내지 않는다)
 9. 갈등의 강도를 적절히 조절한다
-10. ⚠️ 사망한 캐릭터는 절대 현재 시점에서 행동/대화하지 않는다 (회상/언급만 가능)
-11. ⚠️ 감금된 캐릭터는 해당 장소에서만 등장 가능
-12. ⚠️ 캐릭터 상태 변화(사망, 감금, 부상 등)는 명확히 표시해야 한다`;
+10. 💀 사망한 캐릭터는 절대 현재 시점에서 행동/대화하지 않는다 (회상/언급만 가능)
+11. 🔒 감금된 캐릭터는 해당 장소에서만 등장 가능
+12. ⚠️ 캐릭터 상태 변화(사망, 감금, 부상 등)는 명확히 표시해야 한다
+13. 📚 역사물인 경우 검증된 역사적 사실만 사용한다
+14. 🔄 이전에 사용한 표현/장면과 동일하거나 유사한 내용 반복 금지`;
+
+  return systemPrompt;
 }
 
 // ============================================
@@ -451,9 +567,23 @@ export function generateVolumePrompt(
   foreshadowings: Foreshadowing[],
   conflicts: Conflict[],
   previousVolumeSummary?: string,
-  consistencyContext?: CharacterConsistencyContext
+  consistencyContext?: CharacterConsistencyContext,
+  // 강화된 옵션 (v2.0)
+  enhancedOptions?: {
+    storyAnalysis?: StoryAnalysisResult;
+    researchSummary?: ResearchSummary;
+    deepCharacterProfiles?: DeepCharacterProfile[];
+    setupPayoffs?: SetupPayoff[];
+    emotionalArc?: EmotionalArc;
+    writingGuidelines?: WritingGuidelines;
+  }
 ): GeneratedPrompt {
-  const systemPrompt = generateSystemPrompt(project, style);
+  const systemPrompt = generateSystemPrompt(project, style, {
+    storyAnalysis: enhancedOptions?.storyAnalysis,
+    researchSummary: enhancedOptions?.researchSummary,
+    writingGuidelines: enhancedOptions?.writingGuidelines,
+    emotionalArc: enhancedOptions?.emotionalArc,
+  });
 
   // 캐릭터 정보 (심화)
   const characterInfo = generateCharacterInfo(characters, true);
@@ -492,10 +622,61 @@ export function generateVolumePrompt(
       generateConsistencyInstructions(consistencyContext)
     : '';
 
+  // 스토리 분석 결과 추가 (v2.0)
+  const storyAnalysisInfo = enhancedOptions?.storyAnalysis
+    ? generateAnalysisSummaryForPrompt(
+        enhancedOptions.storyAnalysis,
+        volume.volumeNumber,
+        1
+      )
+    : '';
+
+  // 심층 캐릭터 프로필 정보 추가 (v2.0)
+  let deepProfileInfo = '';
+  if (enhancedOptions?.deepCharacterProfiles && enhancedOptions.deepCharacterProfiles.length > 0) {
+    deepProfileInfo = `\n## 🎭 캐릭터 심층 프로필\n`;
+    for (const profile of enhancedOptions.deepCharacterProfiles.slice(0, 5)) {
+      deepProfileInfo += `### ${profile.name} (${profile.role})
+- 핵심 상처: ${profile.psychology.coreWound}
+- 믿는 거짓: ${profile.psychology.lie}
+- 깨달을 진실: ${profile.psychology.truth}
+- 외적 목표(want): ${profile.psychology.want}
+- 내적 필요(need): ${profile.psychology.need}
+- 가장 큰 두려움: ${profile.psychology.fear}
+- 말투: ${profile.voice.speechPatterns.slice(0, 3).join(', ')}
+- 입버릇: ${profile.voice.catchPhrases.slice(0, 2).join(', ')}
+
+`;
+    }
+  }
+
+  // 복선/페이백 추적 정보 (v2.0)
+  let setupPayoffInfo = '';
+  if (enhancedOptions?.setupPayoffs && enhancedOptions.setupPayoffs.length > 0) {
+    const relevantPayoffs = enhancedOptions.setupPayoffs.filter(
+      sp => sp.setup.volume <= volume.volumeNumber &&
+            (!sp.payoff.completed || sp.payoff.plannedVolume === volume.volumeNumber)
+    );
+    if (relevantPayoffs.length > 0) {
+      setupPayoffInfo = `\n## 🎯 복선/페이백 관리\n`;
+      setupPayoffInfo += `### 이번 권에서 심어야 할 복선\n`;
+      const toPlant = relevantPayoffs.filter(sp => sp.setup.volume === volume.volumeNumber);
+      for (const sp of toPlant) {
+        setupPayoffInfo += `- ${sp.setup.description} (방법: ${sp.setup.method}, 미묘함: ${sp.setup.subtlety}/10)\n`;
+      }
+      setupPayoffInfo += `\n### 이번 권에서 해소할 복선\n`;
+      const toResolve = relevantPayoffs.filter(sp => sp.payoff.plannedVolume === volume.volumeNumber && !sp.payoff.completed);
+      for (const sp of toResolve) {
+        setupPayoffInfo += `- ${sp.payoff.description} (감정적 임팩트: ${sp.payoff.emotionalImpact})\n`;
+      }
+    }
+  }
+
   const userPrompt = `## 현재 집필: ${volume.volumeNumber}권 "${volume.title}"
 목표 글자수: ${volume.targetWordCount.toLocaleString()}자
 
 ${consistencyInfo}
+${storyAnalysisInfo}
 
 ## ⚠️ 절대 규칙 - 종료점
 이 권은 반드시 다음 조건에서 끝나야 합니다:
@@ -521,6 +702,7 @@ ${sceneList}
 
 ## 등장인물 정보
 ${characterInfo}
+${deepProfileInfo}
 
 ---
 
@@ -534,6 +716,7 @@ ${plotInfo}
 ---
 
 ${foreshadowingInfo}
+${setupPayoffInfo}
 
 ---
 
@@ -544,7 +727,14 @@ ${conflictInfo}
 ${volume.nextVolumePreview ? `## 다음 권 예고 (참고만, 절대 쓰지 말 것!)\n${volume.nextVolumePreview}\n` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-위 모든 설정을 바탕으로 ${volume.volumeNumber}권을 집필하세요.
+⚠️ 필수 체크리스트:
+1. 위 모든 설정(캐릭터 프로필, 복선, 갈등)을 반드시 반영
+2. 사망/감금된 캐릭터 상태 준수
+3. 이전 씬과 중복되는 내용 금지
+4. 역사물인 경우 검증된 사실만 사용
+5. 캐릭터별 말투와 입버릇 유지
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${volume.volumeNumber}권을 집필하세요.
 첫 번째 씬부터 시작합니다.
 종료점에 도달하면 즉시 멈추세요.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
@@ -576,9 +766,24 @@ export function generateScenePrompt(
   foreshadowings: Foreshadowing[],
   conflicts: Conflict[],
   previousSceneSummary?: string,
-  consistencyContext?: CharacterConsistencyContext
+  consistencyContext?: CharacterConsistencyContext,
+  // 강화된 옵션 (v2.0)
+  enhancedOptions?: {
+    storyAnalysis?: StoryAnalysisResult;
+    researchSummary?: ResearchSummary;
+    deepCharacterProfiles?: DeepCharacterProfile[];
+    sceneDesign?: SceneDesign;
+    setupPayoffs?: SetupPayoff[];
+    emotionalArc?: EmotionalArc;
+    writingGuidelines?: WritingGuidelines;
+  }
 ): GeneratedPrompt {
-  const systemPrompt = generateSystemPrompt(project, style);
+  const systemPrompt = generateSystemPrompt(project, style, {
+    storyAnalysis: enhancedOptions?.storyAnalysis,
+    researchSummary: enhancedOptions?.researchSummary,
+    writingGuidelines: enhancedOptions?.writingGuidelines,
+    emotionalArc: enhancedOptions?.emotionalArc,
+  });
 
   // 해당 씬 등장인물만 필터 (심화 정보 포함)
   const sceneCharacters = characters.filter(c =>
@@ -621,12 +826,74 @@ export function generateScenePrompt(
     ? generateConsistencyInstructions(consistencyContext)
     : '';
 
+  // 스토리 분석 결과 추가 (v2.0)
+  const storyAnalysisInfo = enhancedOptions?.storyAnalysis
+    ? generateAnalysisSummaryForPrompt(
+        enhancedOptions.storyAnalysis,
+        volume.volumeNumber,
+        scene.sceneNumber
+      )
+    : '';
+
+  // 씬 비트 설계 정보 추가 (v2.0)
+  let sceneDesignInfo = '';
+  if (enhancedOptions?.sceneDesign) {
+    const sd = enhancedOptions.sceneDesign;
+    sceneDesignInfo = `\n## 🎬 씬 비트 설계
+- 목적: ${sd.purpose}
+- 감정 목표: ${sd.emotionalGoal}
+- 긴장 곡선: ${sd.tensionCurve.join(' → ')}
+
+### 비트 구성
+${sd.beats.slice(0, 10).map(b => `${b.beatNumber}. [${b.type}] ${b.description} (긴장: ${b.tension}/10)
+   ${b.dialogueSample ? `   대사 예시: "${b.dialogueSample}"` : ''}`).join('\n')}
+
+### 필수 대사
+${sd.mustInclude.dialogues.map(d => `- ${d.speaker}: "${d.essence}"`).join('\n')}
+
+### 필수 행동
+${sd.mustInclude.actions.map(a => `- ${a}`).join('\n')}
+
+### 이번 씬의 복선
+${sd.mustInclude.foreshadowings.map(f => `- ${f}`).join('\n')}
+
+### 금지 사항
+${sd.avoid.map(a => `- ❌ ${a}`).join('\n')}
+
+### 훅
+- 이전 씬에서 넘어오는 훅: ${sd.hookFromPrevious}
+- 다음 씬으로 이어지는 훅: ${sd.hookToNext}
+`;
+  }
+
+  // 심층 캐릭터 프로필 정보 (이 씬 등장인물만)
+  let deepProfileInfo = '';
+  if (enhancedOptions?.deepCharacterProfiles && enhancedOptions.deepCharacterProfiles.length > 0) {
+    const sceneProfiles = enhancedOptions.deepCharacterProfiles.filter(
+      p => scene.participants.includes(p.name) || sceneCharacters.some(c => c.name === p.name)
+    );
+    if (sceneProfiles.length > 0) {
+      deepProfileInfo = `\n### 🎭 등장인물 심층 프로필\n`;
+      for (const profile of sceneProfiles) {
+        deepProfileInfo += `**${profile.name}**
+- 이 씬에서의 내면: ${profile.psychology.lie} → ${profile.psychology.truth}로 향하는 여정 중
+- 말투: ${profile.voice.speechPatterns.slice(0, 2).join(', ')}
+- 입버릇: "${profile.voice.catchPhrases[0] || ''}"
+- 주의: ${profile.voice.avoidWords.slice(0, 2).join(', ')} 표현 금지
+
+`;
+      }
+    }
+  }
+
   const userPrompt = `## 현재 집필 정보
 - 작품: ${project.title} ${volume.volumeNumber}권
 - 현재 씬: ${scene.sceneNumber}번 "${scene.title}"
 - 목표 글자수: ${scene.targetWordCount.toLocaleString()}자
 
 ${consistencyInfo}
+${storyAnalysisInfo}
+${sceneDesignInfo}
 
 ## 씬 설정
 - 시점(POV): ${scene.pov} (${povTypeMap[scene.povType] || '3인칭 제한'})
@@ -654,6 +921,7 @@ ${previousSceneSummary ? `## 직전 씬 요약\n${previousSceneSummary}\n` : ''}
 
 ## 등장인물
 ${characterInfo}
+${deepProfileInfo}
 
 ---
 
@@ -668,6 +936,13 @@ ${conflictInfo ? conflictInfo + '\n---\n' : ''}
 
 ${scene.nextScenePreview ? `## 다음 씬 예고 (참고만, 절대 쓰지 말 것!)\n${scene.nextScenePreview}\n` : ''}
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 필수 체크리스트:
+1. 위 씬 비트 설계를 따라 집필
+2. 캐릭터별 말투와 입버릇 반드시 반영
+3. 사망/감금된 캐릭터 등장 금지
+4. 이전 씬과 중복되는 장면/대사 금지
+5. 복선은 자연스럽게 배치
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 위 설정에 따라 이 씬을 집필하세요.
 종료 조건에 도달하면 즉시 멈추세요.
@@ -789,6 +1064,12 @@ export function generateQuickPrompt(
     customPrompt?: string;
     selectedCharacterIds?: string[];
     sceneSetting?: { title: string; location: string; timeframe: string };
+  },
+  // 강화된 옵션 (v2.0)
+  enhancedOptions?: {
+    storyAnalysis?: StoryAnalysisResult;
+    deepCharacterProfiles?: DeepCharacterProfile[];
+    writingGuidelines?: WritingGuidelines;
   }
 ): string {
   // 선택된 캐릭터 또는 주요 캐릭터
@@ -828,6 +1109,51 @@ export function generateQuickPrompt(
     expand: '위 내용을 더 자세하게 확장하세요.',
   };
 
+  // 스토리 분석 기반 경고 (v2.0)
+  let storyWarnings = '';
+  if (enhancedOptions?.storyAnalysis) {
+    const deadChars = enhancedOptions.storyAnalysis.characterStates.filter(c => c.status === 'dead');
+    const imprisonedChars = enhancedOptions.storyAnalysis.characterStates.filter(c => c.status === 'imprisoned');
+
+    if (deadChars.length > 0) {
+      storyWarnings += `\n### 💀 사망한 캐릭터 (절대 등장 금지!)
+${deadChars.map(c => `- ${c.characterName}`).join('\n')}
+`;
+    }
+    if (imprisonedChars.length > 0) {
+      storyWarnings += `\n### 🔒 감금/제한된 캐릭터
+${imprisonedChars.map(c => `- ${c.characterName}: ${c.lastSeenLocation}에서만`).join('\n')}
+`;
+    }
+  }
+
+  // 심층 캐릭터 정보 (v2.0)
+  let deepCharInfo = '';
+  if (enhancedOptions?.deepCharacterProfiles) {
+    const relevantProfiles = enhancedOptions.deepCharacterProfiles.filter(
+      p => selectedCharacters.some(c => c.name === p.name)
+    );
+    if (relevantProfiles.length > 0) {
+      deepCharInfo = `\n### 캐릭터 심층 정보
+${relevantProfiles.map(p => `**${p.name}**
+- 말투: ${p.voice.speechPatterns.slice(0, 2).join(', ')}
+- 입버릇: "${p.voice.catchPhrases[0] || ''}"
+- 주의: ${p.voice.avoidWords.slice(0, 2).join(', ')} 표현 금지`).join('\n\n')}
+`;
+    }
+  }
+
+  // 집필 가이드라인 힌트 (v2.0)
+  let guidelinesHint = '';
+  if (enhancedOptions?.writingGuidelines) {
+    const wg = enhancedOptions.writingGuidelines;
+    guidelinesHint = `\n### 문체 가이드
+- ${wg.style.toneDescriptions[0] || ''}
+- 대화: ${wg.style.dialogueStyle}
+- 금지: ${wg.avoidList.slice(0, 2).join(', ')}
+`;
+  }
+
   return `당신은 한국의 베스트셀러 소설가입니다.
 
 ## 작품 정보
@@ -843,10 +1169,13 @@ ${options.sceneSetting ? `
 
 ## 등장인물
 ${characterInfo}
+${deepCharInfo}
 
 ## 세계관
 ${worldInfo}
 ${conflictHint}
+${storyWarnings}
+${guidelinesHint}
 
 ## 현재 내용
 """
@@ -861,6 +1190,11 @@ ${options.customPrompt ? `- 추가 지시: ${options.customPrompt}` : ''}
 
 ## 지시사항
 ${typeInstructions[options.generationType]}
+
+## ⚠️ 절대 규칙
+- 사망한 캐릭터는 현재 시점에서 절대 등장 불가 (회상/언급만)
+- 이전에 쓴 내용과 중복되는 장면/대사 금지
+- 캐릭터별 고유 말투 반드시 유지
 
 ## 한국 소설책 형식 - 필수
 - 문단 첫 줄 들여쓰기 (전각 공백)

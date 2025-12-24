@@ -192,7 +192,10 @@ ${worldSettings.map(s => `- ${categoryLabels[s.category]}: ${s.title}`).join('\n
 
 카테고리: ${Object.values(categoryLabels).join(', ')} 중 선택`;
 
-      const response = await generateText(settings.geminiApiKey, prompt, { temperature: 0.8 });
+      const response = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.8,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
 
       // 파싱하여 설정 추가
       const blocks = response.split(/\n\n+/).filter(b => b.trim());

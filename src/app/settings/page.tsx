@@ -11,6 +11,9 @@ import {
   EyeOff,
   CheckCircle,
   AlertCircle,
+  Cpu,
+  Sparkles,
+  PenTool,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +30,8 @@ import {
 } from '@/components/ui/select';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useUIStore, ThemeMode } from '@/stores/uiStore';
+import { MODEL_OPTIONS } from '@/lib/gemini';
+import { GeminiModel } from '@/types';
 
 const fontOptions = [
   { value: 'Pretendard', label: 'Pretendard (기본)' },
@@ -156,6 +161,105 @@ export default function SettingsPage() {
                 </a>
                 에서 API 키를 발급받을 수 있습니다
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* AI 모델 설정 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cpu className="h-5 w-5" />
+              AI 모델 설정
+            </CardTitle>
+            <CardDescription>
+              기획용과 집필용 모델을 분리하여 비용을 절감하세요
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* 비용 절감 팁 */}
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-primary mb-2">💡 비용 절감 팁</p>
+              <p className="text-xs text-muted-foreground">
+                기획(캐릭터, 세계관, 플롯)은 고품질 모델로, 집필은 무료 모델로 설정하면
+                <br />
+                <strong>품질은 유지하면서 비용을 90% 이상 절감</strong>할 수 있습니다!
+              </p>
+            </div>
+
+            {/* 기획용 모델 */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-yellow-500" />
+                기획용 모델
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                캐릭터 설정, 세계관, 플롯 구성 등 창의적인 기획 작업에 사용됩니다
+              </p>
+              <Select
+                value={settings?.planningModel || 'gemini-3-flash'}
+                onValueChange={(value: GeminiModel) => updateSettings({ planningModel: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span>{option.label}</span>
+                        <span className="text-xs text-muted-foreground">{option.price}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 집필용 모델 */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <PenTool className="h-4 w-4 text-blue-500" />
+                집필용 모델
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                실제 소설 본문 작성에 사용됩니다 (기획 내용을 바탕으로 글쓰기)
+              </p>
+              <Select
+                value={settings?.writingModel || 'gemini-2.0-flash'}
+                onValueChange={(value: GeminiModel) => updateSettings({ writingModel: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span>{option.label}</span>
+                        <span className="text-xs text-muted-foreground">{option.price}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 예상 비용 안내 */}
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <p className="text-sm font-medium mb-2">📊 예상 비용 (소설 1편 기준)</p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>• 기획 10회 ({settings?.planningModel || 'gemini-3-flash'}):
+                  {settings?.planningModel === 'gemini-2.0-flash' ? ' 무료' :
+                   settings?.planningModel === 'gemini-3-flash' ? ' ~$0.95' :
+                   settings?.planningModel === 'gemini-2.5-flash' ? ' ~$0.20' : ' ~$0.10'}
+                </p>
+                <p>• 집필 50회 ({settings?.writingModel || 'gemini-2.0-flash'}):
+                  {settings?.writingModel === 'gemini-2.0-flash' ? ' 무료' :
+                   settings?.writingModel === 'gemini-3-flash' ? ' ~$10.50' :
+                   settings?.writingModel === 'gemini-2.5-flash' ? ' ~$2.10' : ' ~$1.05'}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

@@ -36,6 +36,11 @@ import {
   generateContinuePrompt,
   generateQuickPrompt,
 } from '@/lib/promptGenerator';
+import {
+  analyzeFullStory,
+  generateWritingContext,
+  StoryAnalysisResult,
+} from '@/lib/storyAnalyzer';
 import { Chapter, Scene, Character, VolumeStructure, SceneStructure, WritingStyle } from '@/types';
 
 interface AIGeneratePanelProps {
@@ -128,6 +133,11 @@ export function AIGeneratePanel({
   const [writingStyle, setWritingStyle] = useState<WritingStyle>(defaultWritingStyle);
   const [previousContent, setPreviousContent] = useState('');
 
+  // 스토리 분석 상태 (v2.0)
+  const [storyAnalysis, setStoryAnalysis] = useState<StoryAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
+
   // 프로젝트의 권 목록 필터링
   const projectVolumes = useMemo(() =>
     volumes.filter(v => v.projectId === projectId),
@@ -158,6 +168,41 @@ export function AIGeneratePanel({
     return getVolumeProgress(selectedVolumeId);
   }, [selectedVolumeId, getVolumeProgress]);
 
+  // 스토리 분석 수행 함수 (v2.0)
+  const performStoryAnalysis = async (): Promise<StoryAnalysisResult | null> => {
+    if (!settings?.geminiApiKey || projectVolumes.length === 0) {
+      return null;
+    }
+
+    try {
+      setIsAnalyzing(true);
+      console.log('[AIGeneratePanel] 스토리 분석 시작...');
+
+      const projectCharacters = allCharacters.filter(c => c.projectId === projectId);
+      const result = await analyzeFullStory(
+        settings.geminiApiKey,
+        projectVolumes,
+        projectCharacters,
+        settings.planningModel || 'gemini-3-flash'
+      );
+
+      // 치명적 경고 추출
+      const criticalWarnings = result.warnings
+        .filter(w => w.severity === 'critical')
+        .map(w => w.description);
+      setAnalysisWarnings(criticalWarnings);
+      setStoryAnalysis(result);
+
+      console.log('[AIGeneratePanel] 스토리 분석 완료, 경고 수:', criticalWarnings.length);
+      return result;
+    } catch (error) {
+      console.error('[AIGeneratePanel] 스토리 분석 실패:', error);
+      return null;
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleGenerate = async () => {
     console.log('[AIGeneratePanel] handleGenerate 호출됨');
     console.log('[AIGeneratePanel] settings 객체:', settings);
@@ -185,7 +230,13 @@ export function AIGeneratePanel({
       const projectForeshadowings = foreshadowings.filter(f => f.projectId === projectId);
       const projectConflicts = conflicts.filter(c => c.projectId === projectId);
 
-      // 새로운 generateQuickPrompt 사용 (모든 기획 데이터 포함)
+      // 스토리 분석 수행 (이전 글 분석하여 일관성 유지) - v2.0
+      let currentAnalysis = storyAnalysis;
+      if (!currentAnalysis && projectVolumes.length > 0) {
+        currentAnalysis = await performStoryAnalysis();
+      }
+
+      // 새로운 generateQuickPrompt 사용 (모든 기획 데이터 + 스토리 분석 포함)
       const prompt = currentProject
         ? generateQuickPrompt(
             currentProject,
@@ -206,7 +257,11 @@ export function AIGeneratePanel({
                 location: scene.location || '미정',
                 timeframe: '미정',
               },
-            }
+            },
+            // v2.0: 스토리 분석 결과 전달 (사망/감금 캐릭터 등)
+            currentAnalysis ? {
+              storyAnalysis: currentAnalysis,
+            } : undefined
           )
         : `당신은 한국의 베스트셀러 소설가입니다.
 
@@ -237,6 +292,7 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: Math.max(500, length[0] * 2),
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (씬 생성은 창의적 작업)
       });
 
       console.log('[AIGeneratePanel] ✅ 응답 수신 완료, 길이:', response?.length || 0);
@@ -400,6 +456,7 @@ ${selectionRegeneratePrompt || '같은 내용을 더 자연스럽고 생생하�
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: Math.max(500, selectedText.length * 2),
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (재생성은 창의적 작업)
       });
 
       const formattedContent = formatNovelText(response);
@@ -496,6 +553,7 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: 8192,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (씬 재생성은 창의적 작업)
       });
 
       const formattedContent = formatNovelText(response);
@@ -559,8 +617,19 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       const projectForeshadowings = foreshadowings.filter(f => f.projectId === projectId);
       const projectConflicts = conflicts.filter(c => c.projectId === projectId);
 
+      // v2.0: 스토리 분석 수행 (일관성 체크)
+      let currentAnalysis = storyAnalysis;
+      if (!currentAnalysis && projectVolumes.length > 0) {
+        currentAnalysis = await performStoryAnalysis();
+      }
+
+      // v2.0: 강화된 옵션 객체
+      const enhancedOptions = currentAnalysis ? {
+        storyAnalysis: currentAnalysis,
+      } : undefined;
+
       if (structuredMode === 'volume') {
-        // 권 전체 생성 - 모든 기획 데이터 포함
+        // 권 전체 생성 - 모든 기획 데이터 + 스토리 분석 포함
         promptResult = generateVolumePrompt(
           currentProject,
           selectedVolume,
@@ -570,10 +639,12 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
           plotStructure,
           projectForeshadowings,
           projectConflicts,
-          previousContent || undefined
+          previousContent || undefined,
+          undefined,
+          enhancedOptions
         );
       } else if (structuredMode === 'scene' && selectedScene) {
-        // 씬 단위 생성 - 모든 기획 데이터 포함
+        // 씬 단위 생성 - 모든 기획 데이터 + 스토리 분석 포함
         promptResult = generateScenePrompt(
           currentProject,
           selectedVolume,
@@ -584,7 +655,9 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
           plotStructure,
           projectForeshadowings,
           projectConflicts,
-          previousContent || undefined
+          previousContent || undefined,
+          undefined,
+          enhancedOptions
         );
       } else if (structuredMode === 'continue' && selectedScene) {
         // 이어쓰기 - 복선/갈등 포함
@@ -617,6 +690,7 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       const response = await generateText(settings.geminiApiKey, fullPrompt, {
         temperature: 0.8,
         maxTokens: Math.min(32000, promptResult.metadata.targetWordCount * 2),
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (구조화 생성은 창의적 작업)
       });
 
       // 텍스트 후처리

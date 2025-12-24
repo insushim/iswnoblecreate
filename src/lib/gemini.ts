@@ -1,7 +1,24 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GeminiModel } from '@/types';
 
 // Gemini API 클라이언트
 let genAI: GoogleGenerativeAI | null = null;
+
+// 모델별 가격 정보 (참고용)
+export const MODEL_PRICING = {
+  'gemini-3-flash': { input: 0.50, output: 3.00, description: '최신 고품질 모델 (유료)' },
+  'gemini-2.5-flash': { input: 0.15, output: 0.60, description: '고성능 모델 (유료)' },
+  'gemini-2.0-flash': { input: 0, output: 0, description: '무료 모델 (추천)' },
+  'gemini-1.5-flash': { input: 0.075, output: 0.30, description: '경량 모델 (유료)' },
+} as const;
+
+// 모델 옵션 (UI용)
+export const MODEL_OPTIONS: { value: GeminiModel; label: string; description: string; price: string }[] = [
+  { value: 'gemini-3-flash', label: 'Gemini 3 Flash', description: '최신 고품질 모델', price: '$0.50/$3.00 (1M 토큰)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: '고성능 모델', price: '$0.15/$0.60 (1M 토큰)' },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: '무료 모델 (추천)', price: '무료' },
+  { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', description: '경량 모델', price: '$0.075/$0.30 (1M 토큰)' },
+];
 
 // Rate Limit 방지를 위한 마지막 요청 시간 추적
 let lastRequestTime = 0;
@@ -42,6 +59,7 @@ export async function generateText(
     maxTokens?: number;
     topP?: number;
     topK?: number;
+    model?: GeminiModel; // 모델 선택 옵션 추가
   }
 ): Promise<string> {
   console.log('[Gemini] generateText called');
@@ -60,7 +78,7 @@ export async function generateText(
 
   try {
     const ai = initGemini(apiKey);
-    const modelName = 'gemini-2.0-flash';
+    const modelName = options?.model || 'gemini-2.0-flash';
     console.log('[Gemini] Creating model:', modelName);
 
     const maxOutputTokens = options?.maxTokens ?? 8192;
@@ -192,6 +210,7 @@ export async function* generateTextStream(
     maxTokens?: number;
     topP?: number;
     topK?: number;
+    model?: GeminiModel; // 모델 선택 옵션 추가
   }
 ): AsyncGenerator<string, void, unknown> {
   console.log('[Gemini] generateTextStream called');
@@ -203,7 +222,7 @@ export async function* generateTextStream(
 
   try {
     const ai = initGemini(apiKey);
-    const modelName = 'gemini-2.0-flash';
+    const modelName = options?.model || 'gemini-2.0-flash';
     const model = ai.getGenerativeModel({
       model: modelName,
       generationConfig: {
@@ -243,14 +262,17 @@ export async function generateJSON<T>(
   options?: {
     temperature?: number;
     maxTokens?: number;
+    model?: GeminiModel; // 모델 선택 옵션 추가
   }
 ): Promise<T> {
   console.log('[Gemini] generateJSON called');
+  console.log('[Gemini] Using model:', options?.model || 'gemini-2.0-flash');
 
   // JSON 생성 시 더 많은 토큰 필요 (기본 16384)
   const jsonOptions = {
     temperature: options?.temperature ?? 0.7, // JSON은 약간 낮은 temperature
     maxTokens: options?.maxTokens ?? 16384, // JSON 생성에 충분한 토큰
+    model: options?.model, // 모델 전달
   };
 
   const fullPrompt = `${prompt}

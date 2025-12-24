@@ -597,6 +597,9 @@ export interface WritingSession {
   notes?: string;
 }
 
+// Gemini 모델 타입
+export type GeminiModel = 'gemini-2.0-flash' | 'gemini-3-flash' | 'gemini-2.5-flash' | 'gemini-1.5-flash';
+
 // 앱 설정
 export interface AppSettings {
   id: string;
@@ -608,6 +611,9 @@ export interface AppSettings {
   soundEffects: boolean;
   notifications: boolean;
   geminiApiKey?: string;
+  // 모델 설정 (기획용/집필용 분리)
+  planningModel: GeminiModel;  // 기획용 모델 (캐릭터, 세계관, 플롯 등)
+  writingModel: GeminiModel;   // 집필용 모델 (실제 글쓰기)
 }
 
 // ============================================

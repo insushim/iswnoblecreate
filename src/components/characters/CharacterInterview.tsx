@@ -113,7 +113,10 @@ ${userQuestion}
 답변만 출력해주세요 (따옴표나 캐릭터 이름 없이).`;
 
       console.log('[CharacterInterview] generateText 호출 중...');
-      const response = await generateText(settings.geminiApiKey, prompt, { temperature: 0.8 });
+      const response = await generateText(settings.geminiApiKey, prompt, {
+        temperature: 0.8,
+        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+      });
       console.log('[CharacterInterview] ✅ 응답 수신, 길이:', response?.length || 0);
 
       const characterMessage: Message = {

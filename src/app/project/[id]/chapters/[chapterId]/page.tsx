@@ -445,6 +445,7 @@ ${isLastScene && remainingLength < 8000
             const response = await generateText(settings.geminiApiKey, prompt, {
               temperature: 0.85,
               maxTokens: 8192,
+              model: settings.writingModel || 'gemini-2.0-flash' // 집필용 모델 사용
             });
 
             let formattedResponse = formatNovelText(response);
