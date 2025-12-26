@@ -106,6 +106,11 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
 
     info += `\n- 나이: ${c.age}${c.gender ? `, ${c.gender}` : ''}`;
 
+    // 생일 (누락되었던 필드 추가)
+    if (detailed && c.birthday) {
+      info += `\n- 생일: ${c.birthday}`;
+    }
+
     if (c.occupation) {
       info += `\n- 직업: ${c.occupation}`;
     }
@@ -200,8 +205,11 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
         if (latestEmotion.trigger) {
           info += ` - 원인: ${latestEmotion.trigger}`;
         }
+        if (latestEmotion.sceneId) {
+          info += ` [씬: ${latestEmotion.sceneId}]`;
+        }
         if (latestEmotion.note) {
-          info += ` [${latestEmotion.note}]`;
+          info += ` (${latestEmotion.note})`;
         }
       }
     }
@@ -382,6 +390,11 @@ function generateWorldInfo(worldSettings: WorldSetting[]): string {
       }
     }
 
+    // 관련 설정 (누락되었던 필드 추가)
+    if (w.relatedSettings && w.relatedSettings.length > 0) {
+      info += `\n관련 설정: ${w.relatedSettings.join(', ')}`;
+    }
+
     return info;
   }).join('\n\n');
 }
@@ -395,9 +408,19 @@ function generatePlotInfo(plotStructure: PlotStructure | null): string {
 
   let info = `## 플롯 구조 (${plotStructure.template})\n`;
 
-  // 커스텀 템플릿 정보 (누락되었던 필드 추가)
+  // 커스텀 템플릿 정보 (누락되었던 필드 - 객체 처리 수정)
   if (plotStructure.customTemplate) {
-    info += `커스텀 템플릿: ${plotStructure.customTemplate}\n`;
+    const ct = plotStructure.customTemplate;
+    info += `커스텀 템플릿: ${ct.name}\n`;
+    if (ct.description) {
+      info += `설명: ${ct.description}\n`;
+    }
+    if (ct.stages && ct.stages.length > 0) {
+      info += `단계 구성:\n`;
+      ct.stages.forEach((s, idx) => {
+        info += `  ${idx + 1}. ${s.name} (${s.percentage}%): ${s.description}\n`;
+      });
+    }
   }
 
   // 플롯 단계 (누락되었던 필드 추가)
@@ -537,7 +560,8 @@ function generateForeshadowingInfo(foreshadowings: Foreshadowing[]): string {
     'planned': '계획됨',
     'planted': '심어짐',
     'reinforced': '강화됨',
-    'revealed': '회수됨',
+    'resolved': '회수됨',
+    'abandoned': '폐기됨',
   };
 
   sorted.forEach((f, i) => {
@@ -708,11 +732,16 @@ export function generateSystemPrompt(
   let systemPrompt = `당신은 한국의 베스트셀러 소설가입니다. 아래 규칙을 철저히 따라 소설을 집필하세요.
 
 ## 작품 정보
-- 작품명: ${project.title}
-- 장르: ${project.genre.join(', ')}
+- 작품명: ${project.title}${project.subtitle ? ` - ${project.subtitle}` : ''}
+- 장르: ${project.genre.join(', ')}${project.subGenre && project.subGenre.length > 0 ? ` (서브: ${project.subGenre.join(', ')})` : ''}
 - 컨셉: ${project.concept}
 - 로그라인: ${project.logline}
 ${project.synopsis ? `- 시놉시스: ${project.synopsis}` : ''}
+${project.detailedSynopsis ? `- 상세 시놉시스: ${project.detailedSynopsis.slice(0, 300)}` : ''}
+${project.targetAudience ? `- 타겟 독자: ${project.targetAudience}` : ''}
+${project.ageRating ? `- 연령 등급: ${project.ageRating === 'all' ? '전체' : project.ageRating === 'teen' ? '청소년' : '성인'}` : ''}
+${project.keywords && project.keywords.length > 0 ? `- 키워드: ${project.keywords.join(', ')}` : ''}
+${project.similarWorks && project.similarWorks.length > 0 ? `- 유사 작품: ${project.similarWorks.join(', ')}` : ''}
 
 ## 문체 설정
 - 시점: ${perspectiveMap[style.perspective]}
@@ -908,17 +937,32 @@ export function generateVolumePrompt(
   // 갈등 정보
   const conflictInfo = generateConflictInfo(conflicts);
 
-  // 씬 목록
+  // 씬 목록 (강화된 정보 포함)
   const sceneList = volume.scenes
     .map((s, i) => {
       let sceneInfo = `${i + 1}. ${s.title} (${s.targetWordCount.toLocaleString()}자)`;
       if (s.pov) sceneInfo += ` [POV: ${s.pov}]`;
+      if (s.povType) {
+        const povTypeMap: Record<string, string> = { 'first': '1인칭', 'third-limited': '3인칭 제한', 'omniscient': '전지적' };
+        sceneInfo += ` (${povTypeMap[s.povType] || s.povType})`;
+      }
       if (s.location) sceneInfo += ` @ ${s.location}`;
+      if (s.timeframe) sceneInfo += ` [${s.timeframe}]`;
+      if (s.participants && s.participants.length > 0) {
+        sceneInfo += `\n   등장: ${s.participants.join(', ')}`;
+      }
+      if (s.startCondition) {
+        sceneInfo += `\n   시작: ${s.startCondition}`;
+      }
       if (s.mustInclude && s.mustInclude.length > 0) {
         sceneInfo += `\n   필수: ${s.mustInclude.join(', ')}`;
       }
       if (s.endCondition) {
         sceneInfo += `\n   종료: ${s.endCondition}`;
+        if (s.endConditionType) {
+          const endTypeMap: Record<string, string> = { 'dialogue': '대사', 'action': '행동', 'narration': '서술', 'scene': '장면' };
+          sceneInfo += ` (${endTypeMap[s.endConditionType] || s.endConditionType})`;
+        }
       }
       return sceneInfo;
     })
