@@ -97,6 +97,26 @@ export async function initializeAppSettings(): Promise<AppSettings> {
         });
       }
 
+      // gemini-3-flash -> gemini-3-flash-preview 마이그레이션 (DB에 구버전 모델명이 저장된 경우)
+      let needsUpdate = false;
+      if ((existingSettings.planningModel as string) === 'gemini-3-flash') {
+        console.log('[DB] planningModel 마이그레이션: gemini-3-flash -> gemini-3-flash-preview');
+        existingSettings.planningModel = 'gemini-3-flash-preview';
+        needsUpdate = true;
+      }
+      if ((existingSettings.writingModel as string) === 'gemini-3-flash') {
+        console.log('[DB] writingModel 마이그레이션: gemini-3-flash -> gemini-3-flash-preview');
+        existingSettings.writingModel = 'gemini-3-flash-preview';
+        needsUpdate = true;
+      }
+      if (needsUpdate) {
+        await db.appSettings.update('default', {
+          planningModel: existingSettings.planningModel,
+          writingModel: existingSettings.writingModel,
+        });
+        console.log('[DB] ✅ 모델 마이그레이션 완료');
+      }
+
       console.log('[DB] ✅ 기존 설정 반환');
       return existingSettings;
     }
