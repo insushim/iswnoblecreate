@@ -105,7 +105,7 @@ ${idea}
       const result = await generateJSON<IdeaExpansionResult>(
         settings.geminiApiKey,
         prompt,
-        { temperature: 0.8 }
+        { temperature: 0.8, model: settings.planningModel || 'gemini-3-flash-preview' }
       );
 
       console.log('[NewProject] ✅ 결과 수신:', result);

@@ -309,7 +309,7 @@ ${chapterCount}개의 챕터를 생성하세요.`;
       const result = await generateJSON<GeneratedChapter[]>(
         settings.geminiApiKey,
         prompt,
-        { temperature: 0.8 }
+        { temperature: 0.8, model: settings.planningModel || 'gemini-3-flash-preview' }
       );
 
       for (const chapterData of result) {

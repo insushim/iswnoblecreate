@@ -188,7 +188,7 @@ export function CharacterForm({ projectId, character, onSuccess }: CharacterForm
         catchphrases: string[];
         startingState: string;
         endingState: string;
-      }>(settings.geminiApiKey, prompt, { temperature: 0.8 });
+      }>(settings.geminiApiKey, prompt, { temperature: 0.8, model: settings.planningModel || 'gemini-3-flash-preview' });
 
       setAppearance(result.appearance);
       setPersonality(result.personality);

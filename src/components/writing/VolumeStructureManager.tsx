@@ -270,7 +270,7 @@ povType: first(1인칭), third-limited(3인칭 제한), omniscient(전지적)`;
           endCondition: string;
           endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
         }>;
-      }>>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 32000 });
+      }>>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 32000, model: settings.planningModel || 'gemini-3-flash-preview' });
 
       // 생성된 권과 씬 저장
       for (let i = 0; i < result.length; i++) {
@@ -424,7 +424,7 @@ endPointType/endConditionType: dialogue(대사), action(행동), narration(서�
           endCondition: string;
           endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
         }>;
-      }>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 16000 });
+      }>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 16000, model: settings.planningModel || 'gemini-3-flash-preview' });
 
       await updateVolume(volumeId, {
         title: result.title,

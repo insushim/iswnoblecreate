@@ -547,7 +547,7 @@ JSON 형식 (반드시 이 형식만 출력):
 
         try {
           const result = await generateJSON<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>(
-            settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
+            settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' }
           );
           await createWorldSetting(projectId, result);
           createdCount++;
@@ -601,7 +601,7 @@ JSON 형식 (반드시 이 형식만 출력):
 {"category": "${category}", "title": "제목", "description": "상세 설명", "importance": "${importance}"}`;
 
       const result = await generateJSON<{category: WorldSetting['category'], title: string, description: string, importance: WorldSetting['importance']}>(
-        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096 }
+        settings.geminiApiKey, worldPrompt, { temperature: 0.7, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' }
       );
       await createWorldSetting(projectId, result);
       alert(`"${name}" 세계관이 생성되었습니다.`);
@@ -709,7 +709,7 @@ JSON 형식 (반드시 이 형식만 출력):
             motivation: string;
             goal: string;
             appearance?: string;
-          }>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 4096 });
+          }>(settings.geminiApiKey, characterPrompt, { temperature: 0.8, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' });
 
           await createCharacter(projectId, {
             name: charResult.name,
@@ -858,7 +858,7 @@ JSON 형식 (반드시 이 형식만 출력):
             description: string;
             type: PlotPoint['type'];
             order: number;
-          }>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 4096 });
+          }>(settings.geminiApiKey, plotPrompt, { temperature: 0.7, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' });
 
           await addPlotPoint({
             ...plotResult,
@@ -976,7 +976,7 @@ JSON 형식 (반드시 이 형식만 출력):
             title: string;
             purpose: string;
             keyEvents: string[];
-          }>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 4096 });
+          }>(settings.geminiApiKey, chapterPrompt, { temperature: 0.7, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' });
 
           await createChapter(projectId, {
             number: chapterResult.number,
@@ -1083,7 +1083,7 @@ JSON 형식 (반드시 이 형식만 출력):
           endPointExact: string;
           endPointType: 'dialogue' | 'action';
           coreEvent: string;
-        }>(settings.geminiApiKey, volumePrompt, { temperature: 0.7, maxTokens: 4096 });
+        }>(settings.geminiApiKey, volumePrompt, { temperature: 0.7, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' });
 
         // 권 생성
         const newVolume = await createVolume(projectId, {
@@ -1148,7 +1148,7 @@ JSON 형식:
               endCondition: string;
               endConditionType: 'dialogue' | 'action';
               mustInclude: string[];
-            }>(settings.geminiApiKey, scenePrompt, { temperature: 0.7, maxTokens: 4096 });
+            }>(settings.geminiApiKey, scenePrompt, { temperature: 0.7, maxTokens: 4096, model: settings.planningModel || 'gemini-3-flash-preview' });
 
             await createScene(newVolume.id, {
               sceneNumber: sceneNum,

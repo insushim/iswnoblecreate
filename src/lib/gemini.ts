@@ -266,13 +266,15 @@ export async function generateJSON<T>(
   }
 ): Promise<T> {
   console.log('[Gemini] generateJSON called');
-  console.log('[Gemini] Using model:', options?.model || 'gemini-2.0-flash');
+  // 기획/분석 작업이므로 기본 모델은 gemini-3-flash-preview
+  const modelToUse = options?.model || 'gemini-3-flash-preview';
+  console.log('[Gemini] Using model:', modelToUse);
 
   // JSON 생성 시 더 많은 토큰 필요 (기본 16384)
   const jsonOptions = {
     temperature: options?.temperature ?? 0.7, // JSON은 약간 낮은 temperature
     maxTokens: options?.maxTokens ?? 16384, // JSON 생성에 충분한 토큰
-    model: options?.model, // 모델 전달
+    model: modelToUse as GeminiModel, // 기본값으로 gemini-3-flash-preview 사용
   };
 
   const fullPrompt = `${prompt}
