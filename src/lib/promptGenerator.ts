@@ -51,6 +51,10 @@ import {
   WritingGuidelines,
 } from './professionalWorkflow';
 
+import {
+  generateHistoricalValidationRules,
+} from './gemini';
+
 // ============================================
 // 컨텍스트 데이터 타입 정의
 // ============================================
@@ -152,6 +156,54 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
     }
     if (c.weaknesses && c.weaknesses.length > 0) {
       info += `\n- 약점: ${c.weaknesses.join(', ')}`;
+    }
+
+    // 스킬/특기 (누락되었던 필드 추가)
+    if (c.skills && c.skills.length > 0) {
+      info += `\n- 특기/스킬: ${c.skills.join(', ')}`;
+    }
+
+    // 습관 (누락되었던 필드 추가)
+    if (c.habits && c.habits.length > 0) {
+      info += `\n- 습관: ${c.habits.join(', ')}`;
+    }
+
+    // 특이한 버릇 (누락되었던 필드 추가)
+    if (c.quirks && c.quirks.length > 0) {
+      info += `\n- 특이 버릇: ${c.quirks.join(', ')}`;
+    }
+
+    // 신체적 특징 (누락되었던 필드 추가)
+    if (c.physicalTraits && c.physicalTraits.length > 0) {
+      info += `\n- 신체적 특징: ${c.physicalTraits.join(', ')}`;
+    }
+
+    // 가족 배경 (누락되었던 필드 추가)
+    if (c.familyBackground) {
+      info += `\n- 가족 배경: ${c.familyBackground.slice(0, 150)}`;
+    }
+
+    // 기질 (누락되었던 필드 추가)
+    if (detailed && c.temperament) {
+      info += `\n- 기질: ${c.temperament}`;
+    }
+
+    // 현재 감정 상태 (누락되었던 필드 추가)
+    if (c.emotionalState && c.emotionalState.length > 0) {
+      const latestEmotion = c.emotionalState[c.emotionalState.length - 1];
+      if (latestEmotion) {
+        info += `\n- 현재 감정: ${latestEmotion.primaryEmotion}`;
+        if (latestEmotion.secondaryEmotion) {
+          info += ` / ${latestEmotion.secondaryEmotion}`;
+        }
+        info += ` (강도: ${latestEmotion.intensity}/10)`;
+        if (latestEmotion.trigger) {
+          info += ` - 원인: ${latestEmotion.trigger}`;
+        }
+        if (latestEmotion.note) {
+          info += ` [${latestEmotion.note}]`;
+        }
+      }
     }
 
     // 말투 패턴 (대화 생성에 중요!)
@@ -274,6 +326,35 @@ function generatePlotInfo(plotStructure: PlotStructure | null): string {
 
   let info = `## 플롯 구조 (${plotStructure.template})\n`;
 
+  // 커스텀 템플릿 정보 (누락되었던 필드 추가)
+  if (plotStructure.customTemplate) {
+    info += `커스텀 템플릿: ${plotStructure.customTemplate}\n`;
+  }
+
+  // 플롯 단계 (누락되었던 필드 추가)
+  if (plotStructure.stages && plotStructure.stages.length > 0) {
+    info += '\n### 플롯 단계\n';
+    // 순서대로 정렬
+    const sortedStages = [...plotStructure.stages].sort((a, b) => a.order - b.order);
+    sortedStages.forEach((stage, i) => {
+      info += `${i + 1}. ${stage.name}`;
+      if (stage.targetPercentage !== undefined) {
+        info += ` (${stage.targetPercentage}%)`;
+      }
+      info += ` [${stage.status}]`;
+      info += '\n';
+      if (stage.description) {
+        info += `   ${stage.description}\n`;
+      }
+      if (stage.purpose) {
+        info += `   목적: ${stage.purpose}\n`;
+      }
+      if (stage.chapters && stage.chapters.length > 0) {
+        info += `   챕터: ${stage.chapters.join(', ')}\n`;
+      }
+    });
+  }
+
   // 플롯 포인트
   if (plotStructure.plotPoints && plotStructure.plotPoints.length > 0) {
     info += '\n### 주요 플롯 포인트\n';
@@ -294,6 +375,16 @@ function generatePlotInfo(plotStructure: PlotStructure | null): string {
     sorted.forEach((p, i) => {
       info += `${i + 1}. [${typeMap[p.type] || p.type}] ${p.title}${p.completed ? ' ✓' : ''}\n`;
       info += `   ${p.description}\n`;
+      // 위치 정보 (누락되었던 필드 추가)
+      if (p.stage) {
+        info += `   단계: ${p.stage}\n`;
+      }
+      if (p.chapterId) {
+        info += `   챕터: ${p.chapterId}\n`;
+      }
+      if (p.sceneId) {
+        info += `   씬: ${p.sceneId}\n`;
+      }
     });
   }
 
@@ -316,6 +407,21 @@ function generatePlotInfo(plotStructure: PlotStructure | null): string {
       info += `   메인 플롯과의 연결: ${sp.connectionToMain}\n`;
       if (sp.mainCharacters && sp.mainCharacters.length > 0) {
         info += `   관련 캐릭터: ${sp.mainCharacters.join(', ')}\n`;
+      }
+      // 범위 정보 (누락되었던 필드 추가)
+      if (sp.startChapter) {
+        info += `   시작: ${sp.startChapter}`;
+        if (sp.endChapter) {
+          info += ` ~ 종료: ${sp.endChapter}`;
+        }
+        info += '\n';
+      }
+      // 비트 정보 (누락되었던 필드 추가)
+      if (sp.beats && sp.beats.length > 0) {
+        info += `   비트:\n`;
+        sp.beats.forEach((beat, idx) => {
+          info += `     ${idx + 1}. ${beat}\n`;
+        });
       }
     });
   }
@@ -352,15 +458,56 @@ function generateForeshadowingInfo(foreshadowings: Foreshadowing[]): string {
     'minor': '○선택',
   };
 
+  const statusMap: Record<string, string> = {
+    'planned': '계획됨',
+    'planted': '심어짐',
+    'reinforced': '강화됨',
+    'revealed': '회수됨',
+  };
+
   sorted.forEach((f, i) => {
     info += `\n${i + 1}. [${typeMap[f.type] || f.type}] ${f.title} (${priorityMap[f.priority]})\n`;
     info += `   ${f.description}\n`;
     info += `   심는 방법: ${f.plantedMethod}\n`;
-    if (f.status === 'planted' || f.status === 'reinforced') {
-      info += `   상태: 아직 회수 안 됨\n`;
+
+    // 미묘함 정도 (누락되었던 필드 추가)
+    if (f.subtlety !== undefined) {
+      info += `   미묘함: ${f.subtlety}/10 ${f.subtlety <= 3 ? '(노골적)' : f.subtlety <= 6 ? '(적당)' : '(매우 은밀)'}\n`;
     }
+
+    // 심어진 위치 (누락되었던 필드 추가)
+    if (f.plantedIn) {
+      info += `   심어진 위치: ${f.plantedIn}\n`;
+    }
+
+    // 현재 상태
+    info += `   상태: ${statusMap[f.status] || f.status}`;
+    if (f.status === 'planted' || f.status === 'reinforced') {
+      info += ' (아직 회수 안 됨)';
+    }
+    info += '\n';
+
+    // 해소 위치 (누락되었던 필드 추가)
+    if (f.resolvedIn) {
+      info += `   해소 위치: ${f.resolvedIn}\n`;
+    }
+    if (f.resolutionMethod) {
+      info += `   해소 방법: ${f.resolutionMethod}\n`;
+    }
+
+    // 관련 캐릭터
     if (f.relatedCharacters && f.relatedCharacters.length > 0) {
       info += `   관련 캐릭터: ${f.relatedCharacters.join(', ')}\n`;
+    }
+
+    // 관련 플롯 (누락되었던 필드 추가)
+    if (f.relatedPlot) {
+      info += `   관련 플롯: ${f.relatedPlot}\n`;
+    }
+
+    // 메모 (누락되었던 필드 추가)
+    if (f.notes) {
+      info += `   메모: ${f.notes.slice(0, 100)}\n`;
     }
   });
 
@@ -401,11 +548,49 @@ function generateConflictInfo(conflicts: Conflict[]): string {
     info += `\n${i + 1}. [${typeMap[c.type] || c.type}] ${c.title} (강도: ${c.intensity}/10, ${statusMap[c.status]})\n`;
     info += `   ${c.description}\n`;
     info += `   위험 요소: ${c.stakes}\n`;
+
+    // 주요 캐릭터 (누락되었던 필드 추가)
+    if (c.primaryCharacter) {
+      info += `   주요 대상: ${c.primaryCharacter}\n`;
+    }
+
     if (c.involvedCharacters && c.involvedCharacters.length > 0) {
       info += `   관련 캐릭터: ${c.involvedCharacters.join(', ')}\n`;
     }
+
+    // 도입 위치 (누락되었던 필드 추가)
+    if (c.introducedIn) {
+      info += `   도입 위치: ${c.introducedIn}\n`;
+    }
+
+    // 에스컬레이션 상세 정보 (누락되었던 필드 - 상세 내용 추가)
     if (c.escalations && c.escalations.length > 0) {
-      info += `   에스컬레이션 단계: ${c.escalations.length}단계\n`;
+      info += `   에스컬레이션 (${c.escalations.length}단계):\n`;
+      c.escalations.forEach((e, idx) => {
+        info += `     ${idx + 1}. ${e.description}`;
+        if (e.intensityChange) {
+          info += ` (강도 ${e.intensityChange > 0 ? '+' : ''}${e.intensityChange})`;
+        }
+        if (e.sceneId) {
+          info += ` [${e.sceneId}]`;
+        }
+        info += '\n';
+      });
+    }
+
+    // 절정 위치 (누락되었던 필드 추가)
+    if (c.climaxIn) {
+      info += `   절정 위치: ${c.climaxIn}\n`;
+    }
+
+    // 해결 위치 (누락되었던 필드 추가)
+    if (c.resolvedIn) {
+      info += `   해결 위치: ${c.resolvedIn}\n`;
+    }
+
+    // 해결 방법 (누락되었던 필드 추가)
+    if (c.resolution) {
+      info += `   해결 방법: ${c.resolution}\n`;
     }
   });
 
@@ -424,6 +609,7 @@ export function generateSystemPrompt(
     researchSummary?: ResearchSummary;
     writingGuidelines?: WritingGuidelines;
     emotionalArc?: EmotionalArc;
+    characterNames?: string[]; // 역사 검증용 캐릭터 이름들
   }
 ): string {
   const perspectiveMap = {
@@ -508,6 +694,18 @@ ${wg.mustIncludeList.map(m => `- ✅ ${m}`).join('\n')}`;
 ${generateResearchSummaryForPrompt(options.researchSummary)}`;
   }
 
+  // 역사물인 경우 캐릭터 교차검증 규칙 추가
+  const isHistoricalFiction = project.genre.some(g =>
+    g.includes('역사') || g.includes('사극') || g.includes('시대물') ||
+    g.includes('퓨전사극') || g.includes('대체역사')
+  );
+
+  if (isHistoricalFiction && options?.characterNames && options.characterNames.length > 0) {
+    systemPrompt += `
+
+${generateHistoricalValidationRules(options.characterNames)}`;
+  }
+
   // 스토리 분석 결과 추가
   if (options?.storyAnalysis) {
     // 사망/감금 캐릭터 명시
@@ -534,39 +732,52 @@ ${imprisonedChars.map(c => `- ${c.characterName}: ${c.lastSeenLocation}에서만
 
   systemPrompt += `
 
-## ⚠️ 절대 규칙 (최우선 순위)
+## 🚨🚨🚨 절대 규칙 (최우선 순위 - 위반 시 전체 생성 실패!) 🚨🚨🚨
 
-### 🚫 절대 금지 - 위반 시 생성 실패
-1. 🛑 **종료 조건 도달 시 즉시 중단**: 종료 조건에 해당하는 장면/대사가 나오면 "---"를 쓰고 멈춤
-2. 🛑 **다음 씬/권 내용 작성 금지**: 현재 씬/권의 종료점 이후 내용은 절대 쓰지 않음
-3. 🛑 **스토리 점프 금지**: 갑자기 며칠/몇 달이 지나거나, 주요 사건을 건너뛰는 것 금지
-4. 🛑 **결말 암시 금지**: 현재 씬에서 작품 전체의 결말이나 해결을 암시하지 않음
+### 🛑 1. 종료 조건 규칙 (Critical!)
+- 종료 조건 도달 시 "---"를 쓰고 **즉시 멈춤**
+- 종료 조건 이후 **단 한 글자도 쓰지 않음**
+- 다음 씬/권 내용 **미리 쓰기 절대 금지**
 
-### ⏱️ 페이싱 규칙 (매우 중요!)
-5. **하나의 씬 = 하나의 상황**: 씬 안에서 시간이 크게 점프하거나 장소가 바뀌면 안 됨
-6. **디테일하게 천천히**: 각 행동, 대화, 감정을 상세히 묘사 (요약하지 말 것!)
-7. **현재 순간에 집중**: "그 후로 며칠이 지나..." 같은 표현 금지
-8. **씬 목표만 달성**: 씬에 주어진 endCondition 외의 다른 목표를 달성하려 하지 않음
+### 🛑 2. 시간 흐름 규칙 (Critical!)
+- ❌ "며칠이 지나", "몇 달이 흘러" 표현 **절대 금지**
+- ❌ "어느덧", "그 후로", "세월이" 표현 **금지**
+- ❌ "일주일이", "한 달이" 같은 시간 점프 **금지**
+- ✅ 현재 순간만 디테일하게 묘사
+- ✅ 하나의 씬 = 연속된 한 장면 (시간 점프 없음)
 
-### 🔄 반복 방지 규칙
-9. **동일 패턴 금지**: 각성-힘획득-결심의 반복 패턴 금지
-10. **유사 대사 금지**: 이전에 나온 대사와 비슷한 대사 금지
-11. **유사 묘사 금지**: 이전에 나온 장면과 비슷한 장면 금지
+### 🛑 3. 페이싱 규칙 (Critical!)
+- ❌ **급진전 금지**: "모든 것이 해결", "드디어 끝났다" 등 금지
+- ❌ **요약 금지**: 사건을 간략히 넘기지 않음
+- ✅ **디테일하게**: 모든 행동, 대화, 감정을 상세히
+- ✅ **천천히**: 목표 분량의 90%까지 종료 조건 도달 금지
+- ✅ **하나의 상황**: 씬당 하나의 상황만 다룸
 
-### 📝 기타 규칙
-12. 한국어로 작성
-13. 캐릭터의 말투와 성격 일관되게 유지
-14. 복선은 자연스럽게 심기 (노골적 금지)
-15. 갈등 강도 적절히 조절
-16. 💀 사망한 캐릭터는 현재 시점에서 행동/대화 불가 (회상/언급만)
-17. 🔒 감금된 캐릭터는 해당 장소에서만 등장
-18. ⚠️ 캐릭터 상태 변화는 명확히 표시
-19. 📚 역사물은 검증된 역사적 사실만 사용
+### 🛑 4. 반복 금지 규칙 (Critical!)
+- ❌ 각성/깨달음 장면 반복 금지
+- ❌ 힘 획득/능력 각성 장면 반복 금지
+- ❌ 결심/다짐 장면 반복 금지
+- ❌ "주먹을 불끈", "눈빛이 변하다", "전율이" 등 진부한 표현 반복 금지
+- ❌ 유사 대사/묘사 반복 금지
 
-### 📏 분량 체크
-- 목표 분량의 90%까지는 종료 조건에 도달하지 않음
-- 분량이 남아도 종료 조건 도달 시 멈춤
-- 분량이 모자라면 디테일을 추가 (새로운 사건 추가 금지)`;
+### 🛑 5. 역사물 규칙 (역사물인 경우 Critical!)
+- ❌ 검증되지 않은 역사적 사실 사용 금지
+- ❌ 인물 혼동 금지 (황진 ≠ 황진이)
+- ❌ 인물 성별 변경 금지
+- ❌ 사망 원인/시기 임의 변경 금지
+- ✅ 위에 제공된 역사적 사실만 사용
+
+### 📝 6. 기타 필수 규칙
+- 한국어로 작성
+- 캐릭터별 말투/성격 일관되게 유지
+- 💀 사망 캐릭터: 현재 시점에서 행동/대화 불가 (회상만)
+- 🔒 감금 캐릭터: 해당 장소에서만 등장
+- 복선은 자연스럽게 (노골적 금지)
+
+### 📏 7. 분량 규칙
+- 목표 분량의 90%까지는 종료 조건 도달 금지
+- 분량 부족 시 디테일 추가 (새 사건 추가 금지)
+- 분량 초과해도 종료 조건 도달 전이면 계속 작성`;
 
   return systemPrompt;
 }
@@ -596,11 +807,15 @@ export function generateVolumePrompt(
     writingGuidelines?: WritingGuidelines;
   }
 ): GeneratedPrompt {
+  // 캐릭터 이름 목록 추출 (역사 검증용)
+  const characterNames = characters.map(c => c.name);
+
   const systemPrompt = generateSystemPrompt(project, style, {
     storyAnalysis: enhancedOptions?.storyAnalysis,
     researchSummary: enhancedOptions?.researchSummary,
     writingGuidelines: enhancedOptions?.writingGuidelines,
     emotionalArc: enhancedOptions?.emotionalArc,
+    characterNames,
   });
 
   // 캐릭터 정보 (심화)
@@ -829,11 +1044,15 @@ export function generateScenePrompt(
     writingGuidelines?: WritingGuidelines;
   }
 ): GeneratedPrompt {
+  // 캐릭터 이름 목록 추출 (역사 검증용)
+  const characterNames = characters.map(c => c.name);
+
   const systemPrompt = generateSystemPrompt(project, style, {
     storyAnalysis: enhancedOptions?.storyAnalysis,
     researchSummary: enhancedOptions?.researchSummary,
     writingGuidelines: enhancedOptions?.writingGuidelines,
     emotionalArc: enhancedOptions?.emotionalArc,
+    characterNames,
   });
 
   // 해당 씬 등장인물만 필터 (심화 정보 포함)
@@ -1166,12 +1385,13 @@ export function generateQuickPrompt(
     writingGuidelines?: WritingGuidelines;
   }
 ): string {
-  // 선택된 캐릭터 또는 주요 캐릭터
+  // 선택된 캐릭터 또는 주요 캐릭터 (더 많이 포함)
   const selectedCharacters = options.selectedCharacterIds
     ? characters.filter(c => options.selectedCharacterIds!.includes(c.id))
-    : characters.filter(c => c.role === 'protagonist' || c.role === 'antagonist').slice(0, 3);
+    : characters.filter(c => c.role === 'protagonist' || c.role === 'antagonist' || c.role === 'deuteragonist').slice(0, 5);
 
-  const characterInfo = generateCharacterInfo(selectedCharacters, false);
+  // 캐릭터 정보를 상세하게 (true로 변경)
+  const characterInfo = generateCharacterInfo(selectedCharacters, true);
 
   // 핵심 세계관만
   const coreWorld = worldSettings.filter(w => w.importance === 'core').slice(0, 3);
@@ -1187,10 +1407,25 @@ export function generateQuickPrompt(
     .slice(-5)
     .join('\n');
 
-  // 활성 갈등 힌트
+  // 활성 갈등 힌트 (강화)
   const activeConflicts = conflicts.filter(c => c.status === 'active' || c.status === 'escalating');
   const conflictHint = activeConflicts.length > 0
-    ? `\n[진행 중인 갈등]\n${activeConflicts.slice(0, 2).map(c => `- ${c.title}`).join('\n')}`
+    ? `\n## 🔥 진행 중인 갈등 (반드시 반영!)
+${activeConflicts.slice(0, 3).map(c => `- **${c.title}** (강도: ${c.intensity}/10): ${c.description.slice(0, 100)}`).join('\n')}`
+    : '';
+
+  // 활성 복선 힌트 (추가)
+  const activeForeshadowings = foreshadowings.filter(f => f.status === 'planted' || f.status === 'reinforced');
+  const foreshadowingHint = activeForeshadowings.length > 0
+    ? `\n## 🎯 심어진 복선 (자연스럽게 언급 가능)
+${activeForeshadowings.slice(0, 3).map(f => `- ${f.title}: ${f.plantedMethod}`).join('\n')}`
+    : '';
+
+  // 플롯 포인트 힌트 (추가)
+  const currentPlotPoints = plotStructure?.plotPoints?.filter(p => !p.completed).slice(0, 2) || [];
+  const plotHint = currentPlotPoints.length > 0
+    ? `\n## 📖 현재 진행 중인 플롯
+${currentPlotPoints.map(p => `- [${p.type}] ${p.title}: ${p.description.slice(0, 80)}`).join('\n')}`
     : '';
 
   // 생성 유형별 지시
@@ -1267,7 +1502,9 @@ ${deepCharInfo}
 
 ## 세계관
 ${worldInfo}
+${plotHint}
 ${conflictHint}
+${foreshadowingHint}
 ${storyWarnings}
 ${guidelinesHint}
 

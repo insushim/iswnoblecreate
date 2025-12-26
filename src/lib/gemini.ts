@@ -24,6 +24,336 @@ export const MODEL_OPTIONS: { value: GeminiModel; label: string; description: st
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1500; // 최소 1.5초 간격
 
+// ============================================
+// 텍스트 후처리 시스템 (깨진 문자 필터링)
+// ============================================
+
+/**
+ * AI 생성 텍스트에서 깨진 문자/이상한 패턴을 정리합니다.
+ * - 우크라이나어/러시아어 등 비한글 문자 제거
+ * - 반복되는 이상한 패턴 제거
+ * - 깨진 괄호 패턴 정리
+ */
+export function cleanGeneratedText(text: string): string {
+  if (!text) return '';
+
+  let cleaned = text;
+
+  // 1. 우크라이나어/러시아어 문자가 포함된 패턴 제거 (예: миттєво, кретини 등)
+  // 키릴 문자 범위: U+0400-U+04FF
+  cleaned = cleaned.replace(/[\u0400-\u04FF]+(\([^)]*\))?/g, '');
+
+  // 2. 괄호 안에 같은 내용이 반복되는 패턴 제거 (예: "миттєво(미ттєво)")
+  cleaned = cleaned.replace(/\([^)]*[\u0400-\u04FF][^)]*\)/g, '');
+
+  // 3. 빈 괄호 제거
+  cleaned = cleaned.replace(/\(\s*\)/g, '');
+
+  // 4. 연속된 느낌표/물음표 과다 사용 정리 (3개 이상 → 2개로)
+  cleaned = cleaned.replace(/!{3,}/g, '!!');
+  cleaned = cleaned.replace(/\?{3,}/g, '??');
+
+  // 5. 연속된 공백 정리
+  cleaned = cleaned.replace(/[ \t]{2,}/g, ' ');
+
+  // 6. 연속된 줄바꿈 정리 (3개 이상 → 2개로)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // 7. 문장 시작의 불필요한 공백 정리
+  cleaned = cleaned.replace(/\n\s+/g, '\n');
+
+  // 8. 이상한 특수문자 조합 제거
+  cleaned = cleaned.replace(/[^\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uD7B0-\uD7FF\u0020-\u007E\u00A0-\u00FF\u2000-\u206F\u3000-\u303F\uFF00-\uFFEF\n\r\t]/g, '');
+
+  // 9. 남은 빈 공간 정리
+  cleaned = cleaned.trim();
+
+  return cleaned;
+}
+
+// ============================================
+// 캐릭터 혼동 방지 데이터베이스
+// ============================================
+
+interface CharacterConfusionData {
+  name: string;
+  gender: 'male' | 'female';
+  identity: string;
+  commonConfusions: string[];
+  historicalFacts: string[];
+  deathInfo?: string;
+}
+
+const KOREAN_HISTORICAL_CHARACTERS: CharacterConfusionData[] = [
+  {
+    name: '황진',
+    gender: 'male',
+    identity: '임진왜란 의병장/무장',
+    commonConfusions: ['황진이', '기생'],
+    historicalFacts: [
+      '1550년 출생, 1593년 전사',
+      '2차 진주성 전투(1593년 6월)에서 전사',
+      '의병장으로 활약',
+      '남해안 방어에 큰 공을 세움',
+    ],
+    deathInfo: '2차 진주성 전투(1593년 6월 29일)에서 전사'
+  },
+  {
+    name: '황진이',
+    gender: 'female',
+    identity: '조선 중기 기생/시인',
+    commonConfusions: ['황진'],
+    historicalFacts: [
+      '16세기 초 활동',
+      '개성 출신 기생',
+      '시조로 유명',
+      '서경덕, 박연폭포와 함께 송도삼절',
+    ],
+  },
+  {
+    name: '이순신',
+    gender: 'male',
+    identity: '조선 수군 장수',
+    commonConfusions: [],
+    historicalFacts: [
+      '1545년 출생, 1598년 전사',
+      '노량해전(1598년 11월)에서 전사',
+      '23전 23승',
+      '한산도 대첩, 명량해전 등',
+    ],
+    deathInfo: '노량해전(1598년 11월 19일)에서 전사'
+  },
+  {
+    name: '곽재우',
+    gender: 'male',
+    identity: '임진왜란 의병장',
+    commonConfusions: [],
+    historicalFacts: [
+      '1552년 출생, 1617년 사망',
+      '홍의장군',
+      '의령에서 의병 봉기',
+    ],
+  },
+  {
+    name: '김시민',
+    gender: 'male',
+    identity: '조선 무장',
+    commonConfusions: [],
+    historicalFacts: [
+      '1554년 출생, 1592년 전사',
+      '1차 진주성 전투에서 전사',
+      '진주 목사',
+    ],
+    deathInfo: '1차 진주성 전투(1592년 10월)에서 전사'
+  },
+];
+
+/**
+ * 역사물 글에서 흔히 발생하는 오류 패턴을 감지합니다.
+ * 교차검증 기반의 강화된 역사 검증 시스템
+ */
+export function detectHistoricalErrors(text: string, characterName?: string): string[] {
+  const errors: string[] = [];
+
+  // 1. 캐릭터 혼동 검사 (데이터베이스 기반)
+  for (const charData of KOREAN_HISTORICAL_CHARACTERS) {
+    if (characterName === charData.name || text.includes(charData.name)) {
+      // 혼동되기 쉬운 인물과 섞이는지 검사
+      for (const confusion of charData.commonConfusions) {
+        if (text.includes(confusion) && text.includes(charData.name)) {
+          errors.push(`⚠️ "${charData.name}"과 "${confusion}"을(를) 혼동하고 있습니다. ${charData.name}은(는) ${charData.identity}입니다.`);
+        }
+      }
+
+      // 성별 혼동 검사
+      if (charData.gender === 'male') {
+        if ((text.includes('여자') || text.includes('여성') || text.includes('그녀')) &&
+            text.includes(charData.name)) {
+          const context = getTextContext(text, charData.name, 50);
+          if (context.includes('여자') || context.includes('여성') || context.includes('그녀')) {
+            errors.push(`⚠️ ${charData.name}은(는) 남성입니다. 여성으로 잘못 표현되고 있습니다.`);
+          }
+        }
+      } else if (charData.gender === 'female') {
+        if ((text.includes('남자') || text.includes('남성') || text.includes('그가') || text.includes('장군')) &&
+            text.includes(charData.name)) {
+          const context = getTextContext(text, charData.name, 50);
+          if (context.includes('남자') || context.includes('남성') || context.includes('장군')) {
+            errors.push(`⚠️ ${charData.name}은(는) 여성입니다. 남성으로 잘못 표현되고 있습니다.`);
+          }
+        }
+      }
+
+      // 사망 정보 검증
+      if (charData.deathInfo) {
+        const wrongDeathPatterns = ['요절', '병사', '암살', '자결'];
+        for (const pattern of wrongDeathPatterns) {
+          const context = getTextContext(text, charData.name, 100);
+          if (context.includes(pattern)) {
+            errors.push(`⚠️ ${charData.name}의 사망 정보가 틀렸습니다. 정확한 정보: ${charData.deathInfo}`);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. 임진왜란 시대 오류 검사
+  if (text.includes('임진왜란') || text.includes('1592') || text.includes('1593') ||
+      text.includes('진주성') || text.includes('한산도')) {
+
+    // 시대착오 검사
+    const anachronisms = [
+      { word: '총', allowedContext: ['조총', '화승총', '불랑기'] },
+      { word: '전화', allowedContext: [] },
+      { word: '자동차', allowedContext: [] },
+      { word: '비행기', allowedContext: [] },
+      { word: '컴퓨터', allowedContext: [] },
+      { word: '스마트폰', allowedContext: [] },
+      { word: '인터넷', allowedContext: [] },
+    ];
+
+    for (const { word, allowedContext } of anachronisms) {
+      if (text.includes(word)) {
+        const isAllowed = allowedContext.some(ctx => text.includes(ctx));
+        if (!isAllowed && allowedContext.length === 0) {
+          errors.push(`⚠️ 시대착오: "${word}"은(는) 임진왜란 시대에 존재하지 않습니다.`);
+        }
+      }
+    }
+
+    // 진주성 전투 관련 검증
+    if (text.includes('진주성')) {
+      if (text.includes('1차') && text.includes('김시민')) {
+        // 1차 진주성 전투: 1592년 10월, 김시민 전사
+        if (text.includes('승리') && text.includes('김시민') && text.includes('생존')) {
+          errors.push('⚠️ 1차 진주성 전투에서 김시민 장군은 승리하였으나 전투 중 부상으로 전사하셨습니다.');
+        }
+      }
+      if (text.includes('2차') && text.includes('황진')) {
+        // 2차 진주성 전투: 1593년 6월, 함락, 황진 전사
+      }
+    }
+  }
+
+  // 3. 시간 점프 감지 (강화)
+  const timeJumpPatterns = [
+    { pattern: '며칠이 지나', severity: 'high' },
+    { pattern: '몇 달이 흘러', severity: 'high' },
+    { pattern: '시간이 흘러', severity: 'high' },
+    { pattern: '어느덧', severity: 'medium' },
+    { pattern: '벌써 며칠', severity: 'high' },
+    { pattern: '그 후로', severity: 'medium' },
+    { pattern: '세월이', severity: 'high' },
+    { pattern: '그로부터', severity: 'medium' },
+    { pattern: '이튿날', severity: 'low' },
+    { pattern: '다음 날', severity: 'low' },
+    { pattern: '일주일이', severity: 'high' },
+    { pattern: '한 달이', severity: 'high' },
+  ];
+
+  for (const { pattern, severity } of timeJumpPatterns) {
+    if (text.includes(pattern)) {
+      if (severity === 'high') {
+        errors.push(`🛑 심각한 시간 점프: "${pattern}" - 씬 내에서 시간이 급격히 점프했습니다. 디테일하게 쓰세요!`);
+      } else if (severity === 'medium') {
+        errors.push(`⚠️ 시간 점프: "${pattern}" - 씬 내에서 시간이 흐르고 있습니다.`);
+      }
+    }
+  }
+
+  // 4. 반복 패턴 감지 (강화) - [\s\S]로 줄바꿈 포함 매칭
+  const repetitivePatterns = [
+    { pattern: /각성[\s\S]{0,200}각성/, message: '각성 장면이 반복됩니다.' },
+    { pattern: /결심[\s\S]{0,200}결심/, message: '결심하는 장면이 반복됩니다.' },
+    { pattern: /깨달[\s\S]{0,200}깨달/, message: '깨달음 장면이 반복됩니다.' },
+    { pattern: /힘을 얻[\s\S]{0,200}힘을 얻/, message: '힘을 얻는 장면이 반복됩니다.' },
+    { pattern: /주먹을 불끈[\s\S]{0,200}주먹을 불끈/, message: '"주먹을 불끈" 표현이 반복됩니다.' },
+    { pattern: /눈빛이 변[\s\S]{0,200}눈빛이 변/, message: '"눈빛이 변하는" 표현이 반복됩니다.' },
+    { pattern: /이를 악물[\s\S]{0,200}이를 악물/, message: '"이를 악무는" 표현이 반복됩니다.' },
+    { pattern: /새로운 힘[\s\S]{0,200}새로운 힘/, message: '"새로운 힘" 표현이 반복됩니다.' },
+    { pattern: /전율이[\s\S]{0,200}전율이/, message: '"전율" 표현이 반복됩니다.' },
+    { pattern: /심장이[\s\S]{0,100}뛰[\s\S]{0,200}심장이[\s\S]{0,100}뛰/, message: '심장 박동 묘사가 반복됩니다.' },
+  ];
+
+  for (const { pattern, message } of repetitivePatterns) {
+    if (pattern.test(text)) {
+      errors.push(`🔄 반복 감지: ${message}`);
+    }
+  }
+
+  // 5. 급진전 패턴 감지
+  const rapidProgressionPatterns = [
+    '모든 것이 해결',
+    '문제가 풀렸다',
+    '드디어 끝났다',
+    '이제 모든 것이',
+    '완전히 달라졌다',
+    '새로운 시대가',
+    '역사가 바뀌',
+  ];
+
+  for (const pattern of rapidProgressionPatterns) {
+    if (text.includes(pattern)) {
+      errors.push(`🛑 급진전: "${pattern}" - 스토리가 너무 빠르게 진행/해결되고 있습니다.`);
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * 특정 키워드 주변의 텍스트 컨텍스트를 추출합니다.
+ */
+function getTextContext(text: string, keyword: string, range: number): string {
+  const index = text.indexOf(keyword);
+  if (index === -1) return '';
+
+  const start = Math.max(0, index - range);
+  const end = Math.min(text.length, index + keyword.length + range);
+
+  return text.slice(start, end);
+}
+
+/**
+ * 역사 검증용 교차검증 규칙을 생성합니다.
+ * 프롬프트에 포함될 역사적 사실 정보
+ */
+export function generateHistoricalValidationRules(characterNames: string[]): string {
+  const rules: string[] = [];
+
+  rules.push('## 📚 역사적 사실 교차검증 규칙 (필수 준수!)');
+  rules.push('');
+
+  for (const name of characterNames) {
+    const charData = KOREAN_HISTORICAL_CHARACTERS.find(c => c.name === name);
+    if (charData) {
+      rules.push(`### ${charData.name} (${charData.identity})`);
+      rules.push(`- 성별: ${charData.gender === 'male' ? '남성' : '여성'}`);
+      rules.push(`- 검증된 역사적 사실:`);
+      for (const fact of charData.historicalFacts) {
+        rules.push(`  - ${fact}`);
+      }
+      if (charData.deathInfo) {
+        rules.push(`- 🛑 사망 정보: ${charData.deathInfo}`);
+      }
+      if (charData.commonConfusions.length > 0) {
+        rules.push(`- ⚠️ 혼동 주의: ${charData.commonConfusions.join(', ')}와(과) 다른 인물임`);
+      }
+      rules.push('');
+    }
+  }
+
+  rules.push('### 🛑 절대 금지 사항');
+  rules.push('- 위 검증된 역사적 사실과 다른 내용 작성 금지');
+  rules.push('- 인물의 성별 변경 금지');
+  rules.push('- 사망 원인/시기 변경 금지 (시간여행/빙의 설정이라도)');
+  rules.push('- 동명이인 혼동 금지');
+  rules.push('');
+
+  return rules.join('\n');
+}
+
 // 요청 간 딜레이 함수
 async function waitForRateLimit(): Promise<void> {
   const now = Date.now();
@@ -137,9 +467,15 @@ export async function generateText(
           }
         }
 
-        const text = response.text();
+        let text = response.text();
 
-        console.log('[Gemini] Response text length:', text?.length || 0);
+        console.log('[Gemini] Response text length (raw):', text?.length || 0);
+
+        // 텍스트 후처리 - 깨진 문자 정리
+        if (text) {
+          text = cleanGeneratedText(text);
+          console.log('[Gemini] Response text length (cleaned):', text?.length || 0);
+        }
 
         // 빈 응답 체크
         if (!text || text.trim().length === 0) {
