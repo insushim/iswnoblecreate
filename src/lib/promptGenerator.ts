@@ -206,6 +206,11 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
       }
     }
 
+    // 말투 스타일 (누락되었던 필드 추가)
+    if (c.speechStyle) {
+      info += `\n- 말투 스타일: ${c.speechStyle}`;
+    }
+
     // 말투 패턴 (대화 생성에 중요!)
     if (c.speechPattern) {
       const sp = c.speechPattern;
@@ -220,6 +225,21 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
       if (sp.avoidWords && sp.avoidWords.length > 0) {
         info += `\n- 안 쓰는 말: ${sp.avoidWords.join(', ')}`;
       }
+      // 누락되었던 필드 추가
+      if (sp.dialect) {
+        info += `\n- 사투리/방언: ${sp.dialect}`;
+      }
+      if (sp.speechHabits && sp.speechHabits.length > 0) {
+        info += `\n- 말버릇: ${sp.speechHabits.join(', ')}`;
+      }
+      if (sp.sampleDialogues && sp.sampleDialogues.length > 0) {
+        info += `\n- 대사 예시: "${sp.sampleDialogues.slice(0, 2).join('", "')}"`;
+      }
+    }
+
+    // 첫 등장 위치 (누락되었던 필드 추가)
+    if (c.firstAppearance) {
+      info += `\n- 첫 등장: ${c.firstAppearance}`;
     }
 
     // 캐릭터 아크
@@ -237,9 +257,29 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
       if (c.arc.transformationTrigger) {
         info += `\n  - 변화 계기: ${c.arc.transformationTrigger}`;
       }
+      // 핵심 순간들 (누락되었던 필드 추가)
+      if (c.arc.keyMoments && c.arc.keyMoments.length > 0) {
+        info += `\n  - 핵심 순간:`;
+        const stageMap: Record<string, string> = {
+          'beginning': '시작',
+          'catalyst': '촉매',
+          'struggle': '갈등',
+          'climax': '절정',
+          'resolution': '해결',
+        };
+        c.arc.keyMoments.forEach((moment, idx) => {
+          info += `\n    ${idx + 1}. [${stageMap[moment.stage] || moment.stage}] ${moment.description}`;
+          if (moment.emotionalImpact) {
+            info += ` (감정: ${moment.emotionalImpact})`;
+          }
+          if (moment.sceneId) {
+            info += ` [${moment.sceneId}]`;
+          }
+        });
+      }
     }
 
-    // 관계 정보
+    // 관계 정보 (강화된 필드들 추가)
     if (c.relationships && c.relationships.length > 0) {
       info += `\n- 관계:`;
       c.relationships.slice(0, 5).forEach(rel => {
@@ -252,8 +292,37 @@ function generateCharacterInfo(characters: Character[], detailed: boolean = fals
           'colleague': '동료',
           'mentor': '스승',
           'student': '제자',
+          'business': '사업',
+          'other': '기타',
         };
-        info += `\n  - ${rel.targetId}: ${relTypeMap[rel.type] || rel.type}${rel.description ? ` (${rel.description.slice(0, 50)})` : ''}`;
+        info += `\n  - ${rel.targetId}: ${relTypeMap[rel.type] || rel.type}`;
+        if (rel.subtype) {
+          info += ` (${rel.subtype})`;
+        }
+        if (rel.description) {
+          info += ` - ${rel.description.slice(0, 50)}`;
+        }
+        // 동적 설명 (누락되었던 필드 추가)
+        if (rel.dynamicDescription) {
+          info += `\n    → 현재: ${rel.dynamicDescription.slice(0, 60)}`;
+        }
+        // 관계 변화 추적 (누락되었던 필드 추가)
+        if (rel.startingRelation && rel.currentRelation) {
+          if (rel.startingRelation !== rel.currentRelation) {
+            info += `\n    → 변화: "${rel.startingRelation}" → "${rel.currentRelation}"`;
+          }
+        }
+        // 긴장도 (누락되었던 필드 추가)
+        if (rel.tension !== undefined && rel.tension > 0) {
+          info += `\n    → 긴장도: ${rel.tension}/10`;
+        }
+        // 관계 진화 기록 (누락되었던 필드 추가)
+        if (detailed && rel.evolution && rel.evolution.length > 0) {
+          info += `\n    → 진화:`;
+          rel.evolution.slice(-2).forEach(ev => {
+            info += `\n      - ${ev.description} ("${ev.relationBefore}" → "${ev.relationAfter}")`;
+          });
+        }
       });
     }
 
@@ -416,11 +485,17 @@ function generatePlotInfo(plotStructure: PlotStructure | null): string {
         }
         info += '\n';
       }
-      // 비트 정보 (누락되었던 필드 추가)
+      // 비트 정보 (SubplotBeat 객체 배열로 처리 - 누락되었던 필드 강화)
       if (sp.beats && sp.beats.length > 0) {
         info += `   비트:\n`;
-        sp.beats.forEach((beat, idx) => {
-          info += `     ${idx + 1}. ${beat}\n`;
+        // SubplotBeat 객체 배열 정렬 후 출력
+        const sortedBeats = [...sp.beats].sort((a, b) => a.order - b.order);
+        sortedBeats.forEach((beat, idx) => {
+          info += `     ${idx + 1}. ${beat.description}`;
+          if (beat.sceneId) {
+            info += ` [${beat.sceneId}]`;
+          }
+          info += '\n';
         });
       }
     });
