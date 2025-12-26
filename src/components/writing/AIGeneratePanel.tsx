@@ -183,7 +183,7 @@ export function AIGeneratePanel({
         settings.geminiApiKey,
         projectVolumes,
         projectCharacters,
-        settings.planningModel || 'gemini-3-flash'
+        settings.planningModel || 'gemini-3-flash-preview'
       );
 
       // 치명적 경고 추출
@@ -292,7 +292,7 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: Math.max(500, length[0] * 2),
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (씬 생성은 창의적 작업)
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용 (씬 생성은 창의적 작업)
       });
 
       console.log('[AIGeneratePanel] ✅ 응답 수신 완료, 길이:', response?.length || 0);
@@ -456,7 +456,7 @@ ${selectionRegeneratePrompt || '같은 내용을 더 자연스럽고 생생하�
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: Math.max(500, selectedText.length * 2),
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (재생성은 창의적 작업)
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용 (재생성은 창의적 작업)
       });
 
       const formattedContent = formatNovelText(response);
@@ -553,7 +553,7 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: 8192,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (씬 재생성은 창의적 작업)
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용 (씬 재생성은 창의적 작업)
       });
 
       const formattedContent = formatNovelText(response);
@@ -690,7 +690,7 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       const response = await generateText(settings.geminiApiKey, fullPrompt, {
         temperature: 0.8,
         maxTokens: Math.min(32000, promptResult.metadata.targetWordCount * 2),
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용 (구조화 생성은 창의적 작업)
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용 (구조화 생성은 창의적 작업)
       });
 
       // 텍스트 후처리

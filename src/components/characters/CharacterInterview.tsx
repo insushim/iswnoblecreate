@@ -115,7 +115,7 @@ ${userQuestion}
       console.log('[CharacterInterview] generateText 호출 중...');
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.8,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       console.log('[CharacterInterview] ✅ 응답 수신, 길이:', response?.length || 0);
 

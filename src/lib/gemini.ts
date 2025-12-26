@@ -6,7 +6,7 @@ let genAI: GoogleGenerativeAI | null = null;
 
 // 모델별 가격 정보 (참고용)
 export const MODEL_PRICING = {
-  'gemini-3-flash': { input: 0.50, output: 3.00, description: '최신 고품질 모델 (유료)' },
+  'gemini-3-flash-preview': { input: 0.50, output: 3.00, description: '최신 고품질 모델 (유료)' },
   'gemini-2.5-flash': { input: 0.15, output: 0.60, description: '고성능 모델 (유료)' },
   'gemini-2.0-flash': { input: 0, output: 0, description: '무료 모델 (추천)' },
   'gemini-1.5-flash': { input: 0.075, output: 0.30, description: '경량 모델 (유료)' },
@@ -14,7 +14,7 @@ export const MODEL_PRICING = {
 
 // 모델 옵션 (UI용)
 export const MODEL_OPTIONS: { value: GeminiModel; label: string; description: string; price: string }[] = [
-  { value: 'gemini-3-flash', label: 'Gemini 3 Flash', description: '최신 고품질 모델', price: '$0.50/$3.00 (1M 토큰)' },
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', description: '최신 고품질 모델', price: '$0.50/$3.00 (1M 토큰)' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: '고성능 모델', price: '$0.15/$0.60 (1M 토큰)' },
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: '무료 모델 (추천)', price: '무료' },
   { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', description: '경량 모델', price: '$0.075/$0.30 (1M 토큰)' },

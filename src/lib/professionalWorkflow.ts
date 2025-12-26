@@ -83,7 +83,7 @@ export async function generateDeepCharacterProfile(
   character: Partial<Character>,
   project: Project,
   existingCharacters: Character[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<DeepCharacterProfile> {
   const prompt = `당신은 베스트셀러 소설가이자 캐릭터 개발 전문가입니다.
 다음 캐릭터에 대한 심층 프로필을 작성해주세요.
@@ -276,7 +276,7 @@ export async function designSceneBeats(
   characters: DeepCharacterProfile[],
   previousSceneSummary: string,
   nextScenePreview: string,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<SceneDesign> {
   const prompt = `당신은 베스트셀러 소설의 씬 설계 전문가입니다.
 다음 씬의 상세 비트를 설계해주세요.
@@ -417,7 +417,7 @@ export async function planSetupPayoffs(
   project: Project,
   plotStructure: PlotStructure,
   totalVolumes: number,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<SetupPayoff[]> {
   const prompt = `당신은 복선과 페이백의 대가인 베스트셀러 작가입니다.
 다음 소설에 대한 복선/페이백 계획을 수립해주세요.
@@ -525,7 +525,7 @@ export async function designEmotionalArc(
   apiKey: string,
   project: Project,
   volumes: number,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<EmotionalArc[]> {
   const prompt = `당신은 독자의 감정을 조율하는 베스트셀러 작가입니다.
 다음 소설의 감정선을 권별로 설계해주세요.
@@ -611,7 +611,7 @@ export async function recommendCharacters(
   project: Project,
   totalWordCount: number,
   existingCharacters: Character[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<CharacterRecommendation[]> {
   // 분량에 따른 권장 캐릭터 수
   const getRecommendedCount = (words: number) => {
@@ -722,7 +722,7 @@ export async function predictReaderReaction(
   apiKey: string,
   sceneContent: string,
   previousContext: string,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<ReaderReactionPrediction> {
   const prompt = `당신은 독자 심리 분석 전문가입니다.
 다음 씬에 대한 독자 반응을 예측해주세요.
@@ -819,7 +819,7 @@ export async function generateWritingGuidelines(
   apiKey: string,
   project: Project,
   characters: DeepCharacterProfile[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<WritingGuidelines> {
   const prompt = `당신은 베스트셀러 작가의 집필 코치입니다.
 다음 소설의 집필 가이드라인을 작성해주세요.

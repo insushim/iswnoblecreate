@@ -132,7 +132,7 @@ ${content.slice(0, 5000)}
 JSON 형식으로만 응답해주세요.`;
 
       const qualityResult = await generateJSON(settings.geminiApiKey, qualityPrompt, {
-        model: settings.planningModel || 'gemini-3-flash' // 기획/분석용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획/분석용 모델 사용
       });
 
       // Step 2: 감정/긴장감 분석
@@ -163,7 +163,7 @@ ${content.slice(0, 5000)}
 JSON 형식으로만 응답해주세요.`;
 
       const emotionResult = await generateJSON(settings.geminiApiKey, emotionPrompt, {
-        model: settings.planningModel || 'gemini-3-flash' // 기획/분석용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획/분석용 모델 사용
       }) as {
         tensionAnalysis?: { averageLevel: number; peakMoments: { position: number; level: number; description: string }[]; lowPoints: { position: number; level: number; suggestion: string }[]; curve: { position: number; level: number }[] };
         emotionAnalysis?: { dominantEmotions: { emotion: string; percentage: number }[]; emotionFlow: { position: number; emotion: string; intensity: number }[]; toneConsistency: number; emotionalImpact: string };
@@ -200,7 +200,7 @@ ${content.slice(0, 5000)}
 JSON 형식으로만 응답해주세요.`;
 
       const styleResult = await generateJSON(settings.geminiApiKey, stylePrompt, {
-        model: settings.planningModel || 'gemini-3-flash' // 기획/분석용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획/분석용 모델 사용
       }) as {
         pacingAnalysis?: { overallPacing: 'too-slow' | 'slow' | 'balanced' | 'fast' | 'too-fast'; variationScore: number; slowSections: { start: number; end: number; suggestion: string }[]; fastSections: { start: number; end: number; suggestion: string }[] };
         styleAnalysis?: { showVsTell: { show: number; tell: number }; activeVsPassive: { active: number; passive: number }; dialogueRatio: number; averageSentenceLength: number; vocabularyRichness: number; repetitiveWords: { word: string; count: number }[]; cliches: { phrase: string; suggestion: string }[] };
@@ -248,7 +248,7 @@ ${characterInfo}
 최대 5개의 제안과 3개의 일관성 문제를 JSON 형식으로만 응답해주세요.`;
 
       const suggestionResult = await generateJSON(settings.geminiApiKey, suggestionPrompt, {
-        model: settings.planningModel || 'gemini-3-flash' // 기획/분석용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획/분석용 모델 사용
       }) as {
         suggestions?: Suggestion[];
         consistencyIssues?: ConsistencyIssue[];

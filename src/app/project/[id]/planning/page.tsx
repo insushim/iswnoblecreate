@@ -212,7 +212,7 @@ export default function PlanningPage() {
 
       const result = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.7,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       setLogline(result.trim());
     } catch (error) {
@@ -250,7 +250,7 @@ export default function PlanningPage() {
 
       const result = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.7,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       setSynopsis(result.trim());
     } catch (error) {
@@ -286,7 +286,7 @@ export default function PlanningPage() {
 
       const result = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.7,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       setDetailedSynopsis(result.trim());
     } catch (error) {
@@ -363,7 +363,7 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
 매력적인 로그라인 한 문장만 출력하세요.`;
       const newLogline = await generateText(settings.geminiApiKey, loglinePrompt, {
         temperature: 0.7,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       setLogline(newLogline.trim());
 
@@ -398,7 +398,7 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
       const newSynopsis = await generateText(settings.geminiApiKey, synopsisPrompt, {
         temperature: 0.7,
         maxTokens: 6000,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       setSynopsis(newSynopsis.trim());
 
@@ -446,7 +446,7 @@ ${calculatedTotalLength >= 1000000 ? '이것은 출판 소설 ' + estimatedBooks
       const newDetailed = await generateText(settings.geminiApiKey, detailedPrompt, {
         temperature: 0.7,
         maxTokens: 16000,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
       setDetailedSynopsis(newDetailed.trim());
 

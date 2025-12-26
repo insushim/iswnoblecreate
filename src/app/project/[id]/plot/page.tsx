@@ -397,7 +397,7 @@ ${characters.map(c => `- ${c.name} (${c.role}): ${c.motivation}`).join('\n')}
 
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.8,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
 
       // 결과를 파싱하여 플롯 포인트로 추가 (간단한 버전)

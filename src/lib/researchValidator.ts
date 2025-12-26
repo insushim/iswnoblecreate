@@ -89,7 +89,7 @@ export interface FactCheckRequest {
 export async function verifyHistoricalFact(
   apiKey: string,
   request: FactCheckRequest,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<HistoricalFactCheck> {
   const requiredSources = request.requiredSources || 3;
 
@@ -170,7 +170,7 @@ export async function verifyMultipleFacts(
   apiKey: string,
   queries: string[],
   era: string,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<HistoricalFactCheck[]> {
   const results: HistoricalFactCheck[] = [];
 
@@ -192,7 +192,7 @@ export async function extractAndVerifyHistoricalFacts(
   apiKey: string,
   text: string,
   era: string,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<{
   extractedFacts: string[];
   verificationResults: HistoricalFactCheck[];
@@ -282,7 +282,7 @@ export async function conductHistoricalResearch(
   topic: string,
   era: string,
   aspects: ('인물' | '사건' | '제도' | '문화' | '지리' | '군사' | '경제')[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<{
   research: Record<string, string>;
   sources: VerifiedSource[];
@@ -367,7 +367,7 @@ export async function quickFactCheck(
   apiKey: string,
   question: string,
   era: string,
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<{
   answer: string;
   confidence: number;

@@ -151,7 +151,7 @@ export async function analyzeFullStory(
   apiKey: string,
   volumes: VolumeStructure[],
   characters: Character[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<StoryAnalysisResult> {
   // 모든 씬의 내용을 수집
   const allContent = collectAllContent(volumes);
@@ -341,7 +341,7 @@ export async function generateWritingContext(
   targetVolume: number,
   targetScene: number,
   characters: Character[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<{
   previousSummary: string;
   characterStates: string;
@@ -461,7 +461,7 @@ export async function validateNewContent(
   newContent: string,
   previousContent: { volume: number; scene: number; content: string }[],
   characters: Character[],
-  model: GeminiModel = 'gemini-3-flash'
+  model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<{
   isValid: boolean;
   violations: {

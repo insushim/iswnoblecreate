@@ -598,7 +598,7 @@ export interface WritingSession {
 }
 
 // Gemini 모델 타입
-export type GeminiModel = 'gemini-2.0-flash' | 'gemini-3-flash' | 'gemini-2.5-flash' | 'gemini-1.5-flash';
+export type GeminiModel = 'gemini-2.0-flash' | 'gemini-3-flash-preview' | 'gemini-2.5-flash' | 'gemini-1.5-flash';
 
 // 앱 설정
 export interface AppSettings {

@@ -194,7 +194,7 @@ ${worldSettings.map(s => `- ${categoryLabels[s.category]}: ${s.title}`).join('\n
 
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.8,
-        model: settings.planningModel || 'gemini-3-flash' // 기획용 모델 사용
+        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
 
       // 파싱하여 설정 추가

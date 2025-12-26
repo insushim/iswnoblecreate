@@ -89,7 +89,7 @@ export async function initializeAppSettings(): Promise<AppSettings> {
       // 모델 설정이 없으면 기본값 추가 (기존 사용자 마이그레이션)
       if (!existingSettings.planningModel || !existingSettings.writingModel) {
         console.log('[DB] 모델 설정 없음, 기본값 추가');
-        existingSettings.planningModel = existingSettings.planningModel || 'gemini-3-flash';
+        existingSettings.planningModel = existingSettings.planningModel || 'gemini-3-flash-preview';
         existingSettings.writingModel = existingSettings.writingModel || 'gemini-2.0-flash';
         await db.appSettings.update('default', {
           planningModel: existingSettings.planningModel,
@@ -112,7 +112,7 @@ export async function initializeAppSettings(): Promise<AppSettings> {
       soundEffects: false,
       notifications: true,
       geminiApiKey: envApiKey,
-      planningModel: 'gemini-3-flash',  // 기획용: 고품질 모델
+      planningModel: 'gemini-3-flash-preview',  // 기획용: 고품질 모델
       writingModel: 'gemini-2.0-flash', // 집필용: 무료 모델
     };
 

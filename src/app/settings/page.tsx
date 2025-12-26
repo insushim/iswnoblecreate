@@ -197,7 +197,7 @@ export default function SettingsPage() {
                 캐릭터 설정, 세계관, 플롯 구성 등 창의적인 기획 작업에 사용됩니다
               </p>
               <Select
-                value={settings?.planningModel || 'gemini-3-flash'}
+                value={settings?.planningModel || 'gemini-3-flash-preview'}
                 onValueChange={(value: GeminiModel) => updateSettings({ planningModel: value })}
               >
                 <SelectTrigger>
@@ -249,14 +249,14 @@ export default function SettingsPage() {
             <div className="border rounded-lg p-4 bg-muted/30">
               <p className="text-sm font-medium mb-2">📊 예상 비용 (소설 1편 기준)</p>
               <div className="text-xs text-muted-foreground space-y-1">
-                <p>• 기획 10회 ({settings?.planningModel || 'gemini-3-flash'}):
+                <p>• 기획 10회 ({settings?.planningModel || 'gemini-3-flash-preview'}):
                   {settings?.planningModel === 'gemini-2.0-flash' ? ' 무료' :
-                   settings?.planningModel === 'gemini-3-flash' ? ' ~$0.95' :
+                   settings?.planningModel === 'gemini-3-flash-preview' ? ' ~$0.95' :
                    settings?.planningModel === 'gemini-2.5-flash' ? ' ~$0.20' : ' ~$0.10'}
                 </p>
                 <p>• 집필 50회 ({settings?.writingModel || 'gemini-2.0-flash'}):
                   {settings?.writingModel === 'gemini-2.0-flash' ? ' 무료' :
-                   settings?.writingModel === 'gemini-3-flash' ? ' ~$10.50' :
+                   settings?.writingModel === 'gemini-3-flash-preview' ? ' ~$10.50' :
                    settings?.writingModel === 'gemini-2.5-flash' ? ' ~$2.10' : ' ~$1.05'}
                 </p>
               </div>
