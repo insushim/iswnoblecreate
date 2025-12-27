@@ -85,9 +85,128 @@ export function CharacterStatusTracker({
     }
   }, [projectId]);
 
+  // 캐릭터 상태 변화 자동 감지 패턴
+  const deathPatterns = [
+    /(.+?)(이|가)\s*(죽었다|숨졌다|전사했다|사망했다|목숨을 잃었다|숨을 거뒀다|눈을 감았다|생을 마감했다)/g,
+    /(.+?)(의|은|는)\s*(죽음|사망|전사|최후)/g,
+    /(.+?)(을|를)\s*(죽였다|처형했다|살해했다|암살했다)/g,
+    /(.+?)(의)\s*(시체|주검|시신)/g,
+  ];
+
+  const injuryPatterns = [
+    /(.+?)(이|가)\s*(다쳤다|부상당했다|상처를 입었다|쓰러졌다|피를 흘렸다)/g,
+    /(.+?)(의)\s*(부상|상처|피)/g,
+  ];
+
+  const imprisonmentPatterns = [
+    /(.+?)(이|가)\s*(감금됐다|감금되었다|감옥에|투옥됐다|갇혔다|포로가 됐다)/g,
+    /(.+?)(을|를)\s*(감금했다|가뒀다|투옥했다|포로로)/g,
+  ];
+
+  const missingPatterns = [
+    /(.+?)(이|가)\s*(사라졌다|행방불명|실종됐다|자취를 감췄다)/g,
+  ];
+
+  // 텍스트에서 캐릭터 상태 변화 자동 감지
+  const autoDetectStatusChanges = useCallback((content: string) => {
+    const detectedChanges: Array<{ characterId: string; characterName: string; newStatus: CharacterStatus['status']; reason: string }> = [];
+
+    characters.forEach(char => {
+      const searchTerms = [char.name];
+      if (char.nickname) searchTerms.push(...char.nickname);
+      if (char.fullName && char.fullName !== char.name) searchTerms.push(char.fullName);
+
+      for (const term of searchTerms) {
+        // 사망 감지
+        for (const pattern of deathPatterns) {
+          const regex = new RegExp(pattern.source.replace('.+?', term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'g');
+          if (regex.test(content)) {
+            const currentStatus = characterStatuses.get(char.id)?.status;
+            if (currentStatus !== 'dead') {
+              detectedChanges.push({
+                characterId: char.id,
+                characterName: char.name,
+                newStatus: 'dead',
+                reason: `"${term}" 캐릭터의 사망이 감지되었습니다.`,
+              });
+            }
+            break;
+          }
+        }
+
+        // 부상 감지
+        for (const pattern of injuryPatterns) {
+          const regex = new RegExp(pattern.source.replace('.+?', term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'g');
+          if (regex.test(content)) {
+            const currentStatus = characterStatuses.get(char.id)?.status;
+            if (currentStatus === 'alive') {
+              detectedChanges.push({
+                characterId: char.id,
+                characterName: char.name,
+                newStatus: 'injured',
+                reason: `"${term}" 캐릭터의 부상이 감지되었습니다.`,
+              });
+            }
+            break;
+          }
+        }
+
+        // 감금 감지
+        for (const pattern of imprisonmentPatterns) {
+          const regex = new RegExp(pattern.source.replace('.+?', term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'g');
+          if (regex.test(content)) {
+            const currentStatus = characterStatuses.get(char.id)?.status;
+            if (currentStatus !== 'imprisoned' && currentStatus !== 'dead') {
+              detectedChanges.push({
+                characterId: char.id,
+                characterName: char.name,
+                newStatus: 'imprisoned',
+                reason: `"${term}" 캐릭터의 감금이 감지되었습니다.`,
+              });
+            }
+            break;
+          }
+        }
+
+        // 실종 감지
+        for (const pattern of missingPatterns) {
+          const regex = new RegExp(pattern.source.replace('.+?', term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'g');
+          if (regex.test(content)) {
+            const currentStatus = characterStatuses.get(char.id)?.status;
+            if (currentStatus === 'alive') {
+              detectedChanges.push({
+                characterId: char.id,
+                characterName: char.name,
+                newStatus: 'missing',
+                reason: `"${term}" 캐릭터의 실종이 감지되었습니다.`,
+              });
+            }
+            break;
+          }
+        }
+      }
+    });
+
+    // 감지된 변화 자동 적용
+    if (detectedChanges.length > 0) {
+      detectedChanges.forEach(change => {
+        updateCharacterStatus(change.characterId, {
+          status: change.newStatus,
+          statusChangedAt: currentSceneId,
+        });
+      });
+      console.log('[CharacterStatusTracker] 자동 상태 변경:', detectedChanges);
+    }
+
+    return detectedChanges;
+  }, [characters, characterStatuses, currentSceneId]);
+
   // 현재 내용에서 캐릭터 언급 감지 및 일관성 검증
   const detectMentionsAndValidate = useCallback(() => {
     if (!currentContent || characters.length === 0) return;
+
+    // 자동 상태 변화 감지 실행
+    autoDetectStatusChanges(currentContent);
 
     const newTracked: TrackedCharacter[] = [];
     const newViolations: CharacterConsistencyViolation[] = [];
@@ -204,7 +323,7 @@ export function CharacterStatusTracker({
       setShowViolationDialog(true);
       onViolationDetected?.(newViolations);
     }
-  }, [currentContent, characters, characterStatuses, currentSceneId, currentVolumeNumber, onViolationDetected]);
+  }, [currentContent, characters, characterStatuses, currentSceneId, currentVolumeNumber, onViolationDetected, autoDetectStatusChanges]);
 
   // 내용이 변경될 때마다 검증 (디바운스 적용)
   useEffect(() => {
@@ -335,33 +454,58 @@ export function CharacterStatusTracker({
             </div>
 
             {/* 상태 변경 버튼 */}
-            <div className="mt-4 pt-4 border-t">
-              <h4 className="text-xs font-semibold text-gray-600 mb-2">
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                <User className="h-3 w-3" />
                 캐릭터 상태 관리
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal">(수동 변경)</span>
               </h4>
-              <div className="space-y-1">
-                {characters.slice(0, 5).map(char => {
+              <div className="space-y-2">
+                {characters.slice(0, 8).map(char => {
                   const status = characterStatuses.get(char.id)?.status || 'alive';
+                  const statusInfo = statusColors[status] || 'bg-gray-100 text-gray-800';
                   return (
-                    <div key={char.id} className="flex items-center justify-between py-1">
-                      <span className="text-xs">{char.name}</span>
+                    <div key={char.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                      <div className="flex items-center gap-2">
+                        {statusIcons[status]}
+                        <span className="text-xs font-medium text-gray-800 dark:text-gray-200">{char.name}</span>
+                      </div>
                       <select
-                        className="text-xs border rounded px-1 py-0.5"
+                        className={`text-xs font-medium border-2 rounded-md px-2 py-1 cursor-pointer transition-all
+                          ${status === 'alive' ? 'border-green-400 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 dark:border-green-600' : ''}
+                          ${status === 'dead' ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 dark:border-red-600' : ''}
+                          ${status === 'imprisoned' ? 'border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-600' : ''}
+                          ${status === 'injured' ? 'border-yellow-400 bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-600' : ''}
+                          ${status === 'missing' ? 'border-gray-400 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-500' : ''}
+                          ${status === 'transformed' ? 'border-purple-400 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-600' : ''}
+                          hover:ring-2 hover:ring-offset-1 focus:outline-none focus:ring-2 focus:ring-offset-1
+                        `}
                         value={status}
                         onChange={(e) => updateCharacterStatus(char.id, {
                           status: e.target.value as CharacterStatus['status'],
                           statusChangedAt: currentSceneId,
                         })}
                       >
-                        <option value="alive">생존</option>
-                        <option value="dead">사망</option>
-                        <option value="imprisoned">감금</option>
-                        <option value="injured">부상</option>
-                        <option value="missing">실종</option>
+                        <option value="alive">✅ 생존</option>
+                        <option value="dead">💀 사망</option>
+                        <option value="imprisoned">🔒 감금</option>
+                        <option value="injured">🩹 부상</option>
+                        <option value="missing">❓ 실종</option>
+                        <option value="transformed">🔮 변화</option>
                       </select>
                     </div>
                   );
                 })}
+                {characters.length > 8 && (
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 text-center pt-1">
+                    +{characters.length - 8}명 더...
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 p-2 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <p className="text-[10px] text-blue-700 dark:text-blue-300">
+                  💡 AI 집필 중 캐릭터 사망/부상 등이 감지되면 자동으로 상태가 업데이트됩니다.
+                </p>
               </div>
             </div>
           </ScrollArea>

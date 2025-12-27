@@ -731,3 +731,796 @@ function createEmptyAnalysisResult(): StoryAnalysisResult {
     },
   };
 }
+
+// ============================================
+// 강화된 검증 함수들 (v2.0)
+// ============================================
+
+/**
+ * 시간 점프 표현을 감지합니다.
+ */
+export function detectTimeJump(content: string): {
+  hasTimeJump: boolean;
+  violations: { expression: string; position: number; suggestion: string }[];
+} {
+  const timeJumpPatterns = [
+    // 기본 시간 점프 표현
+    { pattern: /며칠이\s*(지나|흘러|흐른)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /몇\s*(달|개월)이\s*(지나|흘러)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /시간이\s*(지나|흘러)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /세월이\s*(지나|흘러)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /어느덧/g, suggestion: '시간 점프 표현 대신 현재 상황 묘사' },
+    { pattern: /그\s*후로/g, suggestion: '시간 점프 표현 대신 현재 상황 묘사' },
+    { pattern: /한참\s*(후|뒤)/g, suggestion: '연속된 시간으로 묘사하세요' },
+    { pattern: /다음\s*날/g, suggestion: '이 표현은 다음 씬에서 사용하세요' },
+    { pattern: /이튿날/g, suggestion: '이 표현은 다음 씬에서 사용하세요' },
+    { pattern: /일주일\s*(후|뒤|이\s*지나)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /한\s*달\s*(후|뒤|이\s*지나)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /몇\s*년\s*(후|뒤|이\s*지나)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /결국/g, suggestion: '요약하지 말고 상세히 묘사하세요' },
+    { pattern: /마침내/g, suggestion: '요약하지 말고 상세히 묘사하세요' },
+    { pattern: /드디어/g, suggestion: '요약하지 말고 상세히 묘사하세요' },
+    { pattern: /그렇게\s*해서/g, suggestion: '요약하지 말고 과정을 상세히 묘사하세요' },
+    { pattern: /그리하여/g, suggestion: '요약하지 말고 과정을 상세히 묘사하세요' },
+    { pattern: /그렇게/g, suggestion: '요약하지 말고 상세히 묘사하세요' },
+    { pattern: /한편/g, suggestion: '시점 전환 금지, 현재 장면만 묘사하세요' },
+    { pattern: /그\s*시각/g, suggestion: '시점 전환 금지, 현재 장면만 묘사하세요' },
+    { pattern: /다른\s*곳에서/g, suggestion: '장소 전환 금지, 현재 장소만 묘사하세요' },
+    { pattern: /그\s*때/g, suggestion: '시점 전환 금지, 현재 장면만 묘사하세요' },
+    { pattern: /한\s*(시간|시간이)\s*(후|뒤|지나)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /얼마\s*(후|뒤)/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /시간이\s*흐르/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /세월이\s*흐르/g, suggestion: '현재 순간만 묘사하세요' },
+    { pattern: /그\s*사이/g, suggestion: '시간 경과 표현 금지' },
+    { pattern: /그\s*동안/g, suggestion: '시간 경과 표현 금지' },
+    // 추가 시간 점프 표현 (더 강화)
+    { pattern: /그\s*이후/g, suggestion: '시간 점프 금지, 현재 순간만 묘사' },
+    { pattern: /나중에/g, suggestion: '시간 점프 금지, 현재 순간만 묘사' },
+    { pattern: /이후로/g, suggestion: '시간 점프 금지, 현재 순간만 묘사' },
+    { pattern: /그로부터/g, suggestion: '시간 점프 금지, 현재 순간만 묘사' },
+    { pattern: /그날\s*이후/g, suggestion: '시간 점프 금지, 현재 순간만 묘사' },
+    { pattern: /그\s*밤/g, suggestion: '다음 씬에서 사용하세요' },
+    { pattern: /밤이\s*깊어/g, suggestion: '시간 점프 금지' },
+    { pattern: /날이\s*밝아/g, suggestion: '다음 씬에서 사용하세요' },
+    { pattern: /동이\s*트/g, suggestion: '다음 씬에서 사용하세요' },
+    { pattern: /해가\s*지고/g, suggestion: '시간 점프 금지' },
+    { pattern: /다음\s*날\s*아침/g, suggestion: '다음 씬에서 사용하세요' },
+    { pattern: /아침이\s*되/g, suggestion: '다음 씬에서 사용하세요' },
+    { pattern: /저녁이\s*되/g, suggestion: '시간 점프 금지' },
+    { pattern: /어느새/g, suggestion: '시간 점프 금지, 현재 순간만 묘사' },
+    { pattern: /문득/g, suggestion: '시간 점프 금지' },
+    { pattern: /그러던\s*어느\s*날/g, suggestion: '시간 점프 금지' },
+    { pattern: /며칠\s*뒤/g, suggestion: '다음 씬에서 사용하세요' },
+    { pattern: /얼마\s*지나지\s*않아/g, suggestion: '시간 점프 금지' },
+    { pattern: /그\s*다음/g, suggestion: '시간 점프 금지' },
+    { pattern: /잠시\s*후/g, suggestion: '시간 점프 표현 최소화' },
+    { pattern: /곧이어/g, suggestion: '시간 점프 표현 최소화' },
+    // 장소 전환 감지 (강화)
+    { pattern: /그\s*무렵/g, suggestion: '시점/장소 전환 금지' },
+    { pattern: /이곳에서\s*멀리/g, suggestion: '장소 전환 금지' },
+    { pattern: /저\s*멀리/g, suggestion: '장소 전환 금지' },
+    { pattern: /한편으로/g, suggestion: '시점 전환 금지' },
+    { pattern: /다른\s*한편/g, suggestion: '시점 전환 금지' },
+    { pattern: /그때\s*그곳/g, suggestion: '시점/장소 전환 금지' },
+    { pattern: /같은\s*시각/g, suggestion: '시점 전환 금지' },
+    { pattern: /바로\s*그\s*시각/g, suggestion: '시점 전환 금지' },
+    // 요약/압축 표현 감지
+    { pattern: /그래서/g, suggestion: '요약하지 말고 과정을 묘사하세요' },
+    { pattern: /따라서/g, suggestion: '요약하지 말고 과정을 묘사하세요' },
+    { pattern: /그러므로/g, suggestion: '요약하지 말고 과정을 묘사하세요' },
+    { pattern: /요컨대/g, suggestion: '요약 금지, 상세히 묘사하세요' },
+    { pattern: /간단히\s*말해/g, suggestion: '요약 금지, 상세히 묘사하세요' },
+    { pattern: /정리하면/g, suggestion: '요약 금지, 상세히 묘사하세요' },
+    { pattern: /결론적으로/g, suggestion: '요약 금지, 상세히 묘사하세요' },
+  ];
+
+  const violations: { expression: string; position: number; suggestion: string }[] = [];
+
+  for (const { pattern, suggestion } of timeJumpPatterns) {
+    let match;
+    const regex = new RegExp(pattern.source, pattern.flags);
+    while ((match = regex.exec(content)) !== null) {
+      violations.push({
+        expression: match[0],
+        position: match.index,
+        suggestion,
+      });
+    }
+  }
+
+  return {
+    hasTimeJump: violations.length > 0,
+    violations,
+  };
+}
+
+/**
+ * 반복되는 장면/표현을 감지합니다.
+ */
+export function detectRepetition(
+  newContent: string,
+  previousContents: string[]
+): {
+  hasRepetition: boolean;
+  repetitions: {
+    type: 'awakening' | 'powerup' | 'resolution' | 'cliche' | 'dialogue' | 'scene' | 'reconciliation' | 'confession';
+    description: string;
+    excerpt: string;
+    severity: 'high' | 'medium' | 'low';
+  }[];
+} {
+  const repetitions: {
+    type: 'awakening' | 'powerup' | 'resolution' | 'cliche' | 'dialogue' | 'scene' | 'reconciliation' | 'confession';
+    description: string;
+    excerpt: string;
+    severity: 'high' | 'medium' | 'low';
+  }[] = [];
+
+  // 각성/깨달음 장면 패턴
+  const awakeningPatterns = [
+    /깨달았다/g,
+    /각성했다/g,
+    /눈을\s*떴다/g,
+    /알게\s*되었다/g,
+    /이해했다/g,
+    /마침내\s*알았다/g,
+    /진정한\s*의미를/g,
+    /비로소\s*깨달/g,
+    /그제서야\s*알았다/g,
+    /눈이\s*뜨였다/g,
+    /정신이\s*번쩍/g,
+  ];
+
+  // 힘 획득 패턴
+  const powerupPatterns = [
+    /힘이\s*솟아났다/g,
+    /새로운\s*힘이/g,
+    /능력이\s*생겼다/g,
+    /강해졌다/g,
+    /힘을\s*얻었다/g,
+    /각성한\s*힘/g,
+    /숨겨진\s*힘이/g,
+    /진정한\s*힘을/g,
+    /파워업/g,
+    /레벨업/g,
+    /능력\s*각성/g,
+    /잠재력이\s*깨어/g,
+  ];
+
+  // 결심/다짐 패턴
+  const resolutionPatterns = [
+    /결심했다/g,
+    /다짐했다/g,
+    /맹세했다/g,
+    /반드시\s*해내겠다/g,
+    /꼭\s*이루겠다/g,
+    /절대로\s*포기하지/g,
+    /이번에는\s*반드시/g,
+    /굳은\s*결의/g,
+    /결연한\s*의지/g,
+    /마음을\s*굳혔다/g,
+    /굳게\s*결심/g,
+  ];
+
+  // 화해/용서 장면 패턴
+  const reconciliationPatterns = [
+    /용서해\s*줘/g,
+    /용서했다/g,
+    /화해했다/g,
+    /오해가\s*풀렸다/g,
+    /관계가\s*회복/g,
+    /다시\s*친해/g,
+    /미안해\s*했다/g,
+    /사과했다/g,
+    /용서를\s*구했다/g,
+  ];
+
+  // 고백/감정 표현 장면 패턴
+  const confessionPatterns = [
+    /좋아한다/g,
+    /사랑한다/g,
+    /감정을\s*고백/g,
+    /마음을\s*전했다/g,
+    /고백했다/g,
+    /감정을\s*표현/g,
+    /사랑을\s*고백/g,
+    /감정이\s*전해졌다/g,
+  ];
+
+  // 클리셰 표현 패턴 (강화)
+  const clichePatterns = [
+    { pattern: /주먹을\s*불끈/g, desc: '주먹을 불끈' },
+    { pattern: /눈빛이\s*변하/g, desc: '눈빛이 변하다' },
+    { pattern: /전율이\s*(느껴|흘렀)/g, desc: '전율이' },
+    { pattern: /심장이\s*뛰었다/g, desc: '심장이 뛰었다' },
+    { pattern: /온몸에\s*전율/g, desc: '온몸에 전율' },
+    { pattern: /이를\s*악물/g, desc: '이를 악물다' },
+    { pattern: /두\s*눈을\s*부릅/g, desc: '두 눈을 부릅뜨다' },
+    { pattern: /피가\s*끓/g, desc: '피가 끓다' },
+    { pattern: /심장이\s*두근/g, desc: '심장이 두근거리다' },
+    { pattern: /눈에\s*불꽃/g, desc: '눈에 불꽃' },
+    { pattern: /눈에서\s*불/g, desc: '눈에서 불' },
+    { pattern: /기운이\s*솟/g, desc: '기운이 솟다' },
+    { pattern: /온몸이\s*떨/g, desc: '온몸이 떨리다' },
+    { pattern: /가슴이\s*벅차/g, desc: '가슴이 벅차다' },
+    { pattern: /눈가가\s*촉촉/g, desc: '눈가가 촉촉해지다' },
+    { pattern: /눈물이\s*핑/g, desc: '눈물이 핑 돌다' },
+    // 추가 클리셰 패턴 (더 강화)
+    { pattern: /주먹을\s*쥐/g, desc: '주먹을 쥐다' },
+    { pattern: /입술을\s*깨물/g, desc: '입술을 깨물다' },
+    { pattern: /눈을\s*감았다/g, desc: '눈을 감다' },
+    { pattern: /숨을\s*죽/g, desc: '숨을 죽이다' },
+    { pattern: /눈이\s*마주치/g, desc: '눈이 마주치다' },
+    { pattern: /심장이\s*멎/g, desc: '심장이 멎다' },
+    { pattern: /숨이\s*멎/g, desc: '숨이 멎다' },
+    { pattern: /온몸에\s*소름/g, desc: '온몸에 소름' },
+    { pattern: /등골이\s*서늘/g, desc: '등골이 서늘하다' },
+    { pattern: /가슴이\s*철렁/g, desc: '가슴이 철렁하다' },
+    { pattern: /눈앞이\s*캄캄/g, desc: '눈앞이 캄캄하다' },
+    { pattern: /머리가\s*하얘/g, desc: '머리가 하얘지다' },
+    { pattern: /손에\s*땀/g, desc: '손에 땀을 쥐다' },
+    { pattern: /가슴이\s*뜨거워/g, desc: '가슴이 뜨거워지다' },
+    { pattern: /목이\s*메/g, desc: '목이 메다' },
+    { pattern: /코끝이\s*찡/g, desc: '코끝이 찡하다' },
+    { pattern: /눈시울이\s*붉어/g, desc: '눈시울이 붉어지다' },
+    { pattern: /가슴이\s*미어/g, desc: '가슴이 미어지다' },
+    { pattern: /온몸이\s*굳/g, desc: '온몸이 굳다' },
+    { pattern: /몸이\s*얼어붙/g, desc: '몸이 얼어붙다' },
+    { pattern: /눈빛이\s*흔들/g, desc: '눈빛이 흔들리다' },
+    { pattern: /손이\s*떨/g, desc: '손이 떨리다' },
+    { pattern: /다리에\s*힘이\s*풀/g, desc: '다리에 힘이 풀리다' },
+  ];
+
+  // 새로운 사건 생성 패턴 (씬 범위 이탈 감지)
+  const newEventPatterns = [
+    { pattern: /갑자기\s*나타났다/g, desc: '갑작스러운 인물 등장' },
+    { pattern: /그때\s*누군가/g, desc: '새로운 인물 등장' },
+    { pattern: /느닷없이/g, desc: '갑작스러운 전개' },
+    { pattern: /뜻밖에도/g, desc: '예상치 못한 전개' },
+    { pattern: /예상치\s*못한/g, desc: '예상치 못한 전개' },
+    { pattern: /갑작스럽게/g, desc: '갑작스러운 전개' },
+    { pattern: /돌연/g, desc: '갑작스러운 전개' },
+    { pattern: /불현듯/g, desc: '갑작스러운 전개' },
+    { pattern: /그\s*순간/g, desc: '급격한 전환' },
+    { pattern: /바로\s*그때/g, desc: '급격한 전환' },
+  ];
+
+  // 이전 내용과 비교하여 패턴 반복 검사
+  const allPrevious = previousContents.join('\n');
+
+  // 각성 장면 반복 검사
+  for (const pattern of awakeningPatterns) {
+    if (pattern.test(newContent) && pattern.test(allPrevious)) {
+      const match = newContent.match(pattern);
+      if (match) {
+        repetitions.push({
+          type: 'awakening',
+          description: '각성/깨달음 장면이 이전에도 있었습니다',
+          excerpt: match[0],
+          severity: 'high',
+        });
+      }
+    }
+  }
+
+  // 힘 획득 반복 검사
+  for (const pattern of powerupPatterns) {
+    if (pattern.test(newContent) && pattern.test(allPrevious)) {
+      const match = newContent.match(pattern);
+      if (match) {
+        repetitions.push({
+          type: 'powerup',
+          description: '힘 획득/강화 장면이 이전에도 있었습니다',
+          excerpt: match[0],
+          severity: 'high',
+        });
+      }
+    }
+  }
+
+  // 결심 반복 검사
+  for (const pattern of resolutionPatterns) {
+    if (pattern.test(newContent) && pattern.test(allPrevious)) {
+      const match = newContent.match(pattern);
+      if (match) {
+        repetitions.push({
+          type: 'resolution',
+          description: '결심/다짐 장면이 이전에도 있었습니다',
+          excerpt: match[0],
+          severity: 'high',
+        });
+      }
+    }
+  }
+
+  // 화해/용서 반복 검사
+  for (const pattern of reconciliationPatterns) {
+    if (pattern.test(newContent) && pattern.test(allPrevious)) {
+      const match = newContent.match(pattern);
+      if (match) {
+        repetitions.push({
+          type: 'reconciliation',
+          description: '화해/용서 장면이 이전에도 있었습니다',
+          excerpt: match[0],
+          severity: 'high',
+        });
+      }
+    }
+  }
+
+  // 고백/감정 표현 반복 검사
+  for (const pattern of confessionPatterns) {
+    if (pattern.test(newContent) && pattern.test(allPrevious)) {
+      const match = newContent.match(pattern);
+      if (match) {
+        repetitions.push({
+          type: 'confession',
+          description: '고백/감정 표현 장면이 이전에도 있었습니다',
+          excerpt: match[0],
+          severity: 'high',
+        });
+      }
+    }
+  }
+
+  // 클리셰 반복 검사
+  for (const { pattern, desc } of clichePatterns) {
+    let count = 0;
+    let match;
+    const regex = new RegExp(pattern.source, pattern.flags);
+    while ((match = regex.exec(newContent)) !== null) {
+      count++;
+    }
+    if (count > 1) {
+      repetitions.push({
+        type: 'cliche',
+        description: `"${desc}" 표현이 같은 내용에서 ${count}번 반복됩니다`,
+        excerpt: desc,
+        severity: 'medium',
+      });
+    }
+    if (pattern.test(newContent) && pattern.test(allPrevious)) {
+      repetitions.push({
+        type: 'cliche',
+        description: `"${desc}" 표현이 이전에도 사용되었습니다`,
+        excerpt: desc,
+        severity: 'low',
+      });
+    }
+  }
+
+  return {
+    hasRepetition: repetitions.some(r => r.severity === 'high'),
+    repetitions,
+  };
+}
+
+/**
+ * 씬 범위 위반을 감지합니다.
+ */
+export function detectSceneBoundaryViolation(
+  content: string,
+  sceneConfig: {
+    location: string;
+    participants: string[];
+    startCondition: string;
+    endCondition: string;
+  }
+): {
+  hasViolation: boolean;
+  violations: {
+    type: 'location_change' | 'new_character' | 'time_skip' | 'scope_overflow';
+    description: string;
+    severity: 'critical' | 'major';
+  }[];
+} {
+  const violations: {
+    type: 'location_change' | 'new_character' | 'time_skip' | 'scope_overflow';
+    description: string;
+    severity: 'critical' | 'major';
+  }[] = [];
+
+  // 장소 변경 감지 패턴
+  const locationChangePatterns = [
+    /다른\s*곳으로\s*(이동|향했다|갔다)/g,
+    /그곳을\s*떠나/g,
+    /장소를\s*옮겨/g,
+    /다음\s*장소로/g,
+    /그리고\s*[가-힣]+에\s*도착/g,
+    /한편\s*[가-힣]+에서는/g,
+  ];
+
+  for (const pattern of locationChangePatterns) {
+    if (pattern.test(content)) {
+      violations.push({
+        type: 'location_change',
+        description: `씬 내에서 장소가 변경되었습니다. 현재 씬은 "${sceneConfig.location}"에서만 진행되어야 합니다.`,
+        severity: 'critical',
+      });
+      break;
+    }
+  }
+
+  // 시간 점프 감지
+  const timeJumpResult = detectTimeJump(content);
+  if (timeJumpResult.hasTimeJump) {
+    for (const v of timeJumpResult.violations) {
+      violations.push({
+        type: 'time_skip',
+        description: `시간 점프 표현 "${v.expression}" 사용됨. ${v.suggestion}`,
+        severity: 'critical',
+      });
+    }
+  }
+
+  return {
+    hasViolation: violations.length > 0,
+    violations,
+  };
+}
+
+/**
+ * 생성된 내용을 실시간으로 검증합니다.
+ */
+export function validateGeneratedContent(
+  newContent: string,
+  previousContents: string[],
+  sceneConfig?: {
+    location: string;
+    participants: string[];
+    startCondition: string;
+    endCondition: string;
+  }
+): {
+  isValid: boolean;
+  score: number; // 0-100
+  issues: {
+    type: string;
+    description: string;
+    severity: 'critical' | 'major' | 'minor';
+    suggestion: string;
+  }[];
+} {
+  const issues: {
+    type: string;
+    description: string;
+    severity: 'critical' | 'major' | 'minor';
+    suggestion: string;
+  }[] = [];
+
+  let score = 100;
+
+  // 1. 시간 점프 검사
+  const timeJumpResult = detectTimeJump(newContent);
+  if (timeJumpResult.hasTimeJump) {
+    for (const v of timeJumpResult.violations) {
+      issues.push({
+        type: 'time_jump',
+        description: `시간 점프 표현: "${v.expression}"`,
+        severity: 'critical',
+        suggestion: v.suggestion,
+      });
+      score -= 20;
+    }
+  }
+
+  // 2. 반복 검사
+  const repetitionResult = detectRepetition(newContent, previousContents);
+  if (repetitionResult.hasRepetition) {
+    for (const r of repetitionResult.repetitions) {
+      issues.push({
+        type: `repetition_${r.type}`,
+        description: r.description,
+        severity: r.severity === 'high' ? 'critical' : r.severity === 'medium' ? 'major' : 'minor',
+        suggestion: '새로운 표현과 상황으로 대체하세요',
+      });
+      score -= r.severity === 'high' ? 15 : r.severity === 'medium' ? 10 : 5;
+    }
+  }
+
+  // 3. 씬 범위 검사
+  if (sceneConfig) {
+    const boundaryResult = detectSceneBoundaryViolation(newContent, sceneConfig);
+    if (boundaryResult.hasViolation) {
+      for (const v of boundaryResult.violations) {
+        issues.push({
+          type: v.type,
+          description: v.description,
+          severity: v.severity,
+          suggestion: '씬에 정의된 범위 내에서만 작성하세요',
+        });
+        score -= 25;
+      }
+    }
+  }
+
+  // 4. 중복 내용 검사
+  const duplicateResult = detectDuplicateContent(newContent, previousContents);
+  if (duplicateResult.hasDuplicate) {
+    for (const d of duplicateResult.duplicates) {
+      if (d.similarity > 0.8) {
+        issues.push({
+          type: 'duplicate_content',
+          description: `중복 내용 감지: "${d.excerpt.slice(0, 50)}..."`,
+          severity: 'major',
+          suggestion: '새로운 내용으로 대체하세요',
+        });
+        score -= 15;
+      }
+    }
+  }
+
+  return {
+    isValid: score >= 60 && !issues.some(i => i.severity === 'critical'),
+    score: Math.max(0, score),
+    issues,
+  };
+}
+
+/**
+ * 스토리 압축을 감지합니다.
+ * 1씬에 너무 많은 사건이 압축되어 있는지 감지합니다.
+ */
+export function detectStoryCompression(
+  content: string,
+  sceneConfig?: {
+    startCondition?: string;
+    endCondition?: string;
+    mustInclude?: string[];
+  }
+): {
+  isCompressed: boolean;
+  compressionScore: number; // 0-100, 높을수록 압축됨
+  violations: {
+    type: 'multiple_events' | 'time_skip' | 'story_arc_complete' | 'major_event';
+    description: string;
+    severity: 'critical' | 'major';
+  }[];
+} {
+  const violations: {
+    type: 'multiple_events' | 'time_skip' | 'story_arc_complete' | 'major_event';
+    description: string;
+    severity: 'critical' | 'major';
+  }[] = [];
+
+  let compressionScore = 0;
+
+  // 1. 주요 사건 키워드 감지 (한 씬에 여러 개 있으면 문제)
+  const majorEventPatterns = [
+    { pattern: /임진왜란/g, event: '임진왜란' },
+    { pattern: /전쟁\s*(시작|발발|개전)/g, event: '전쟁 시작' },
+    { pattern: /전쟁에서\s*(승리|패배)/g, event: '전쟁 종결' },
+    { pattern: /진주성\s*전투/g, event: '진주성 전투' },
+    { pattern: /한산도\s*대첩/g, event: '한산도 대첩' },
+    { pattern: /노량해전/g, event: '노량해전' },
+    { pattern: /명나라\s*원군/g, event: '명나라 참전' },
+    { pattern: /왜군\s*(침략|상륙)/g, event: '왜군 침략' },
+    { pattern: /과거\s*(시험|급제|합격)/g, event: '과거 급제' },
+    { pattern: /회빙\s*됐다|회빙\s*했다|환생|빙의|영혼\s*이동/g, event: '회빙/환생' },
+    { pattern: /각성\s*(했다|하다|하고)/g, event: '능력 각성' },
+    { pattern: /수련\s*(시작|완료)|무공\s*익히|내공\s*쌓/g, event: '수련' },
+    { pattern: /선천진기|후천진기|단전|기해혈/g, event: '무공 관련' },
+    { pattern: /결혼|혼인|장가|시집/g, event: '결혼' },
+    { pattern: /죽음|사망|전사|순국/g, event: '사망' },
+    { pattern: /왕|임금|선조|광해군/g, event: '왕 관련' },
+    { pattern: /장군|의병장|병마절도사/g, event: '직위 관련' },
+  ];
+
+  const detectedEvents: string[] = [];
+  for (const { pattern, event } of majorEventPatterns) {
+    if (pattern.test(content)) {
+      if (!detectedEvents.includes(event)) {
+        detectedEvents.push(event);
+      }
+    }
+  }
+
+  // 한 씬에 3개 이상의 주요 사건이 있으면 압축된 것으로 판단
+  if (detectedEvents.length >= 3) {
+    violations.push({
+      type: 'multiple_events',
+      description: `1씬에 너무 많은 사건이 포함됨: ${detectedEvents.join(', ')}`,
+      severity: 'critical',
+    });
+    compressionScore += 40;
+  } else if (detectedEvents.length >= 2) {
+    violations.push({
+      type: 'multiple_events',
+      description: `1씬에 여러 사건이 포함됨: ${detectedEvents.join(', ')}`,
+      severity: 'major',
+    });
+    compressionScore += 20;
+  }
+
+  // 2. 시간 경과 표현 감지 (시간이 많이 흐르면 압축된 것)
+  const timeProgressPatterns = [
+    { pattern: /며칠이\s*(지나|흘러)/g, weight: 30 },
+    { pattern: /몇\s*(달|개월)이\s*(지나|흘러)/g, weight: 40 },
+    { pattern: /몇\s*년이\s*(지나|흘러)/g, weight: 50 },
+    { pattern: /세월이\s*(흘러|지나)/g, weight: 40 },
+    { pattern: /시간이\s*(지나|흘러)/g, weight: 20 },
+    { pattern: /그\s*후로/g, weight: 15 },
+    { pattern: /그렇게\s*해서/g, weight: 15 },
+    { pattern: /마침내/g, weight: 10 },
+    { pattern: /드디어/g, weight: 10 },
+    { pattern: /결국/g, weight: 15 },
+  ];
+
+  for (const { pattern, weight } of timeProgressPatterns) {
+    let match;
+    const regex = new RegExp(pattern.source, pattern.flags);
+    while ((match = regex.exec(content)) !== null) {
+      violations.push({
+        type: 'time_skip',
+        description: `시간 점프 표현: "${match[0]}"`,
+        severity: 'critical',
+      });
+      compressionScore += weight;
+    }
+  }
+
+  // 3. 스토리 아크 완료 감지 (한 씬에 시작과 끝이 다 있으면 압축)
+  const storyArcPatterns = [
+    { start: /시작했다|시작되었다|시작하/g, end: /끝났다|완료했다|마쳤다|성공했다/g },
+    { start: /출발했다|떠났다/g, end: /도착했다|도달했다/g },
+    { start: /수련을\s*시작/g, end: /수련을\s*(마치|완료|끝)/g },
+    { start: /전쟁이\s*시작/g, end: /전쟁이\s*(끝|종료)/g },
+    { start: /여행을\s*시작/g, end: /여행을\s*(마치|끝)/g },
+  ];
+
+  for (const { start, end } of storyArcPatterns) {
+    if (start.test(content) && end.test(content)) {
+      violations.push({
+        type: 'story_arc_complete',
+        description: '한 씬에 이야기의 시작과 끝이 모두 포함됨',
+        severity: 'critical',
+      });
+      compressionScore += 35;
+    }
+  }
+
+  // 4. 장 전환 표현 감지 (다른 시간대/장소로 급격히 전환)
+  const chapterTransitionPatterns = [
+    /그로부터\s*\d+\s*(일|달|년|개월)/g,
+    /\d+\s*(일|달|년|개월)\s*(후|뒤)/g,
+    /한편/g,
+    /그\s*무렵/g,
+    /같은\s*시각/g,
+    /다른\s*곳에서/g,
+  ];
+
+  for (const pattern of chapterTransitionPatterns) {
+    let match;
+    const regex = new RegExp(pattern.source, pattern.flags);
+    while ((match = regex.exec(content)) !== null) {
+      violations.push({
+        type: 'time_skip',
+        description: `장/시간 전환 표현: "${match[0]}"`,
+        severity: 'major',
+      });
+      compressionScore += 15;
+    }
+  }
+
+  // 5. 글자 수 대비 사건 밀도 확인
+  const contentLength = content.length;
+  const eventDensity = (detectedEvents.length * 1000) / Math.max(contentLength, 1);
+
+  // 1000자당 1개 이상의 주요 사건이 있으면 너무 밀집
+  if (eventDensity > 1) {
+    compressionScore += 20;
+  }
+
+  // 점수 상한
+  compressionScore = Math.min(compressionScore, 100);
+
+  return {
+    isCompressed: compressionScore >= 40 || violations.some(v => v.severity === 'critical'),
+    compressionScore,
+    violations,
+  };
+}
+
+/**
+ * 씬 종료 조건 이후의 내용이 포함되어 있는지 감지합니다.
+ */
+export function detectBeyondEndCondition(
+  content: string,
+  endCondition: string,
+  futureEvents?: string[]
+): {
+  hasBeyondEnd: boolean;
+  violations: string[];
+} {
+  const violations: string[] = [];
+
+  // 종료 조건에서 키워드 추출
+  const endKeywords = endCondition.split(/[,\s]+/).filter(k => k.length >= 2);
+
+  // 종료 조건 이후의 일반적인 미래 사건들
+  const commonFuturePatterns = [
+    /그\s*후로/g,
+    /그\s*이후/g,
+    /나중에/g,
+    /훗날/g,
+    /미래에/g,
+    /결국/g,
+    /마침내\s*그/g,
+  ];
+
+  // 미래 사건 키워드 확인
+  const allFutureEvents = futureEvents || [];
+
+  // 임진왜란 관련 미래 사건 (1592-1598)
+  const warFuturePatterns = [
+    /임진왜란\s*(발발|시작)/g,
+    /왜군\s*(침입|상륙)/g,
+    /진주성\s*전투/g,
+    /한산도\s*대첩/g,
+    /노량해전/g,
+    /이순신\s*장군/g,
+    /의병\s*(봉기|활동)/g,
+  ];
+
+  for (const pattern of [...commonFuturePatterns, ...warFuturePatterns]) {
+    if (pattern.test(content)) {
+      const match = content.match(pattern);
+      if (match) {
+        violations.push(`종료 조건 이후 내용 포함: "${match[0]}"`);
+      }
+    }
+  }
+
+  for (const futureEvent of allFutureEvents) {
+    if (content.includes(futureEvent)) {
+      violations.push(`미래 사건 포함: "${futureEvent}"`);
+    }
+  }
+
+  return {
+    hasBeyondEnd: violations.length > 0,
+    violations,
+  };
+}
+
+/**
+ * 프롬프트에 추가할 반복 방지 경고를 생성합니다.
+ */
+export function generateRepetitionWarnings(previousContents: string[]): string {
+  const allContent = previousContents.join('\n');
+
+  const warnings: string[] = [];
+
+  // 각성 장면이 있었는지
+  const awakeningPatterns = [/깨달았다/g, /각성했다/g, /마침내\s*알았다/g];
+  for (const pattern of awakeningPatterns) {
+    if (pattern.test(allContent)) {
+      warnings.push('이미 각성/깨달음 장면이 있었으므로 반복하지 마세요');
+      break;
+    }
+  }
+
+  // 힘 획득 장면이 있었는지
+  const powerupPatterns = [/힘이\s*솟아났다/g, /새로운\s*힘이/g, /강해졌다/g];
+  for (const pattern of powerupPatterns) {
+    if (pattern.test(allContent)) {
+      warnings.push('이미 힘 획득/강화 장면이 있었으므로 반복하지 마세요');
+      break;
+    }
+  }
+
+  // 결심 장면이 있었는지
+  const resolutionPatterns = [/결심했다/g, /다짐했다/g, /맹세했다/g];
+  for (const pattern of resolutionPatterns) {
+    if (pattern.test(allContent)) {
+      warnings.push('이미 결심/다짐 장면이 있었으므로 반복하지 마세요');
+      break;
+    }
+  }
+
+  if (warnings.length === 0) {
+    return '';
+  }
+
+  return `\n### 🔄 반복 방지 경고 (이전 내용 분석 결과)\n${warnings.map(w => `- ⚠️ ${w}`).join('\n')}\n`;
+}

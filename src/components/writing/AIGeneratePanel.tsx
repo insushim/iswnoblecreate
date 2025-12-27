@@ -40,7 +40,10 @@ import {
   analyzeFullStory,
   generateWritingContext,
   StoryAnalysisResult,
+  detectStoryCompression,
+  detectTimeJump,
 } from '@/lib/storyAnalyzer';
+import { cleanGeneratedText } from '@/lib/gemini';
 import { Chapter, Scene, Character, VolumeStructure, SceneStructure, WritingStyle } from '@/types';
 
 interface AIGeneratePanelProps {
@@ -137,6 +140,13 @@ export function AIGeneratePanel({
   const [storyAnalysis, setStoryAnalysis] = useState<StoryAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
+
+  // 생성 결과 검증 상태
+  const [validationResult, setValidationResult] = useState<{
+    isValid: boolean;
+    warnings: string[];
+    criticalErrors: string[];
+  } | null>(null);
 
   // 프로젝트의 권 목록 필터링
   const projectVolumes = useMemo(() =>
@@ -695,6 +705,24 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
 
       // 텍스트 후처리
       const formattedContent = formatNovelText(response);
+
+      // 씬 생성 시 검증 수행
+      if (structuredMode === 'scene' && selectedScene) {
+        const validation = validateGeneratedSceneContent(formattedContent, {
+          startCondition: selectedScene.startCondition,
+          endCondition: selectedScene.endCondition,
+        });
+        setValidationResult(validation);
+
+        // 심각한 오류 시 경고 표시 (하지만 내용은 보여줌)
+        if (!validation.isValid) {
+          console.warn('[AIGeneratePanel] 생성 내용 검증 실패:', validation.criticalErrors);
+          setError(`⚠️ 경고: ${validation.criticalErrors.slice(0, 2).join(', ')}\n이 내용을 적용하면 씬 범위를 벗어날 수 있습니다.`);
+        }
+      } else {
+        setValidationResult(null);
+      }
+
       setGeneratedContent(formattedContent);
 
       // 글자수 업데이트
@@ -715,9 +743,22 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
     }
   };
 
-  // 소설책 형식으로 텍스트 정리
+  // 소설책 형식으로 텍스트 정리 + 빈 괄호 제거 강화
   const formatNovelText = (text: string): string => {
-    let formatted = text.trim();
+    // 1단계: cleanGeneratedText로 기본 정리 (빈 괄호, 깨진 문자 등)
+    let formatted = cleanGeneratedText(text);
+
+    // 2단계: 추가 빈 괄호 제거 (더 강화)
+    // 한글 단어 뒤의 빈 괄호 제거 (예: "성웅()" → "성웅")
+    formatted = formatted.replace(/([가-힣]+)\s*\(\s*\)/g, '$1');
+    // 영어 단어 뒤의 빈 괄호 제거
+    formatted = formatted.replace(/([a-zA-Z]+)\s*\(\s*\)/g, '$1');
+    // 숫자 뒤의 빈 괄호 제거
+    formatted = formatted.replace(/(\d+)\s*\(\s*\)/g, '$1');
+    // 빈 괄호만 단독으로 있는 경우 제거
+    formatted = formatted.replace(/\s*\(\s*\)\s*/g, ' ');
+    // 여러 개의 연속 공백 정리
+    formatted = formatted.replace(/\s{2,}/g, ' ');
 
     // 특수문자 구분선 제거
     formatted = formatted.replace(/^[\*\-\=\#\_]{2,}\s*$/gm, '');
@@ -770,7 +811,50 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       }
     }
 
+    // 최종 빈 괄호 한번 더 제거 (안전장치)
+    result = result.replace(/([가-힣a-zA-Z0-9])\s*\(\s*\)/g, '$1');
+
     return result.trim();
+  };
+
+  // 생성된 내용 검증 함수 (스토리 압축, 시간 점프 감지)
+  const validateGeneratedSceneContent = (
+    content: string,
+    sceneConfig?: { startCondition?: string; endCondition?: string }
+  ): {
+    isValid: boolean;
+    warnings: string[];
+    criticalErrors: string[];
+  } => {
+    const warnings: string[] = [];
+    const criticalErrors: string[] = [];
+
+    // 1. 스토리 압축 감지
+    const compressionResult = detectStoryCompression(content, sceneConfig);
+    if (compressionResult.isCompressed) {
+      criticalErrors.push(`스토리 압축 감지 (점수: ${compressionResult.compressionScore})`);
+      for (const v of compressionResult.violations) {
+        if (v.severity === 'critical') {
+          criticalErrors.push(`- ${v.description}`);
+        } else {
+          warnings.push(`- ${v.description}`);
+        }
+      }
+    }
+
+    // 2. 시간 점프 감지
+    const timeJumpResult = detectTimeJump(content);
+    if (timeJumpResult.hasTimeJump) {
+      for (const v of timeJumpResult.violations) {
+        warnings.push(`시간 점프: "${v.expression}" - ${v.suggestion}`);
+      }
+    }
+
+    return {
+      isValid: criticalErrors.length === 0,
+      warnings,
+      criticalErrors,
+    };
   };
 
   const toggleCharacter = (characterId: string) => {
@@ -1396,13 +1480,57 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
                     )}
                   </Button>
 
-                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  {error && <p className="text-sm text-destructive whitespace-pre-line">{error}</p>}
+
+                  {/* 검증 결과 표시 */}
+                  {validationResult && !validationResult.isValid && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>스토리 압축/시간 점프 감지!</AlertTitle>
+                      <AlertDescription>
+                        <ul className="list-disc list-inside text-xs mt-1 space-y-1">
+                          {validationResult.criticalErrors.slice(0, 5).map((err, i) => (
+                            <li key={i} className="text-red-600">{err}</li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs">
+                          💡 이 씬은 기획에서 정의한 범위를 벗어났습니다.
+                          <br />씬 설정의 시작/종료 조건을 확인하고 다시 생성해주세요.
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {validationResult && validationResult.warnings.length > 0 && validationResult.isValid && (
+                    <Alert>
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      <AlertTitle className="text-yellow-700">경고</AlertTitle>
+                      <AlertDescription>
+                        <ul className="list-disc list-inside text-xs mt-1">
+                          {validationResult.warnings.slice(0, 3).map((warn, i) => (
+                            <li key={i}>{warn}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   {/* 생성된 내용 */}
                   {generatedContent && (
                     <div className="space-y-3">
-                      <Label>생성된 내용</Label>
-                      <div className="p-4 rounded-lg bg-muted/50 border max-h-60 overflow-y-auto">
+                      <div className="flex items-center justify-between">
+                        <Label>생성된 내용</Label>
+                        {validationResult && (
+                          <Badge variant={validationResult.isValid ? 'default' : 'destructive'}>
+                            {validationResult.isValid ? '✓ 검증 통과' : '⚠ 검증 실패'}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className={`p-4 rounded-lg border max-h-60 overflow-y-auto ${
+                        validationResult && !validationResult.isValid
+                          ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
+                          : 'bg-muted/50'
+                      }`}>
                         <p className="text-sm whitespace-pre-wrap">{generatedContent}</p>
                       </div>
                       <div className="flex gap-2">
@@ -1410,8 +1538,12 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
                           <RefreshCw className="h-4 w-4 mr-2" />
                           다시 생성
                         </Button>
-                        <Button className="flex-1" onClick={handleApply}>
-                          적용하기
+                        <Button
+                          className="flex-1"
+                          onClick={handleApply}
+                          variant={validationResult && !validationResult.isValid ? 'destructive' : 'default'}
+                        >
+                          {validationResult && !validationResult.isValid ? '⚠ 그래도 적용' : '적용하기'}
                         </Button>
                       </div>
                     </div>

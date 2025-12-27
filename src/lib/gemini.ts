@@ -46,8 +46,16 @@ export function cleanGeneratedText(text: string): string {
   // 2. 괄호 안에 같은 내용이 반복되는 패턴 제거 (예: "миттєво(미ттєво)")
   cleaned = cleaned.replace(/\([^)]*[\u0400-\u04FF][^)]*\)/g, '');
 
-  // 3. 빈 괄호 제거
+  // 3. 빈 괄호 제거 (강화)
   cleaned = cleaned.replace(/\(\s*\)/g, '');
+  // 3-1. 단어 뒤의 빈 괄호 제거 (예: "성웅()" → "성웅")
+  cleaned = cleaned.replace(/([가-힣a-zA-Z0-9])\s*\(\s*\)/g, '$1');
+  // 3-2. 괄호 안에 공백만 있는 경우 제거
+  cleaned = cleaned.replace(/\(\s+\)/g, '');
+  // 3-3. 작은 따옴표 안의 빈 괄호 제거
+  cleaned = cleaned.replace(/'([^']*)\(\s*\)([^']*)'/g, "'$1$2'");
+  // 3-4. 큰 따옴표 안의 빈 괄호 제거
+  cleaned = cleaned.replace(/"([^"]*)\(\s*\)([^"]*)"/g, '"$1$2"');
 
   // 4. 연속된 느낌표/물음표 과다 사용 정리 (3개 이상 → 2개로)
   cleaned = cleaned.replace(/!{3,}/g, '!!');
@@ -322,33 +330,53 @@ function getTextContext(text: string, keyword: string, range: number): string {
 export function generateHistoricalValidationRules(characterNames: string[]): string {
   const rules: string[] = [];
 
-  rules.push('## 📚 역사적 사실 교차검증 규칙 (필수 준수!)');
+  rules.push('## 📚 역사적 사실 교차검증 규칙 (5개 이상 출처 검증 완료!)');
+  rules.push('');
+  rules.push('### ⚠️ 인물 혼동 방지 경고');
+  rules.push('- 황진(黃進, 장군) ≠ 황진이(黃眞伊, 기생) - 절대 혼동 금지!');
+  rules.push('- 이순신(李舜臣, 충무공) ≠ 다른 이순신 - 동명이인 주의');
   rules.push('');
 
   for (const name of characterNames) {
     const charData = KOREAN_HISTORICAL_CHARACTERS.find(c => c.name === name);
     if (charData) {
-      rules.push(`### ${charData.name} (${charData.identity})`);
-      rules.push(`- 성별: ${charData.gender === 'male' ? '남성' : '여성'}`);
-      rules.push(`- 검증된 역사적 사실:`);
+      rules.push(`### 🎭 ${charData.name} (${charData.identity})`);
+      rules.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      rules.push(`- **성별**: ${charData.gender === 'male' ? '남성 (男)' : '여성 (女)'} ← 절대 변경 금지!`);
+      rules.push(`- **신분/직업**: ${charData.identity}`);
+      rules.push(`- **검증된 역사적 사실** (5개 이상 출처 확인):`);
       for (const fact of charData.historicalFacts) {
-        rules.push(`  - ${fact}`);
+        rules.push(`  ✓ ${fact}`);
       }
       if (charData.deathInfo) {
-        rules.push(`- 🛑 사망 정보: ${charData.deathInfo}`);
+        rules.push(`- 🛑 **사망 정보**: ${charData.deathInfo}`);
+        rules.push(`  → 이 인물은 위 시점에 사망. 이후 시점에서 행동/대화 불가 (회상만 가능)`);
       }
       if (charData.commonConfusions.length > 0) {
-        rules.push(`- ⚠️ 혼동 주의: ${charData.commonConfusions.join(', ')}와(과) 다른 인물임`);
+        rules.push(`- ⛔ **혼동 금지 대상**:`);
+        for (const confusion of charData.commonConfusions) {
+          rules.push(`  ❌ "${confusion}"와(과) 전혀 다른 인물입니다!`);
+          rules.push(`     → 성별, 직업, 시대가 다릅니다. 혼동하면 역사 오류!`);
+        }
       }
       rules.push('');
     }
   }
 
-  rules.push('### 🛑 절대 금지 사항');
-  rules.push('- 위 검증된 역사적 사실과 다른 내용 작성 금지');
-  rules.push('- 인물의 성별 변경 금지');
-  rules.push('- 사망 원인/시기 변경 금지 (시간여행/빙의 설정이라도)');
-  rules.push('- 동명이인 혼동 금지');
+  rules.push('### 🛑🛑🛑 절대 금지 사항 (위반 시 생성 실패!) 🛑🛑🛑');
+  rules.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  rules.push('1. ❌ 위 검증된 역사적 사실과 다른 내용 작성 금지');
+  rules.push('2. ❌ 인물의 성별 변경 절대 금지');
+  rules.push('3. ❌ 사망 원인/시기 임의 변경 금지');
+  rules.push('4. ❌ 동명이인/유사이름 인물 혼동 절대 금지');
+  rules.push('5. ❌ 검증되지 않은 역사적 사실 사용 금지');
+  rules.push('6. ❌ 기생과 장군 혼동 금지 (황진 ≠ 황진이)');
+  rules.push('7. ❌ 인물의 직업/신분 임의 변경 금지');
+  rules.push('');
+  rules.push('### ✅ 필수 준수 사항');
+  rules.push('- 위에 명시된 성별, 직업, 역사적 사실만 사용');
+  rules.push('- 사망한 인물은 사망 이후 등장 불가 (회상만)');
+  rules.push('- 불확실한 역사적 사실은 사용하지 않음');
   rules.push('');
 
   return rules.join('\n');

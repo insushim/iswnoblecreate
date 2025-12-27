@@ -1,8 +1,9 @@
 /**
- * 역사물 교차검증 시스템
+ * 역사물 교차검증 시스템 v2.0
  *
- * 역사적 사실을 3개 이상의 공신력 있는 출처에서 검증합니다.
- * 집필 시 자동으로 역사적 자료를 수집하고 교차 분석합니다.
+ * 역사적 사실을 5개 이상의 공신력 있는 출처에서 검증합니다.
+ * 기획 단계부터 역사 인물/사건을 철저히 검증합니다.
+ * 인물 혼동 방지 (예: 황진 장군 ≠ 황진이 기생)
  */
 
 import { generateJSON, generateText } from './gemini';
@@ -84,14 +85,14 @@ export interface FactCheckRequest {
 
 /**
  * 역사적 사실을 교차 검증합니다.
- * 최소 3개 이상의 공신력 있는 출처에서 정보를 수집하고 비교합니다.
+ * 최소 5개 이상의 공신력 있는 출처에서 정보를 수집하고 비교합니다.
  */
 export async function verifyHistoricalFact(
   apiKey: string,
   request: FactCheckRequest,
   model: GeminiModel = 'gemini-3-flash-preview'
 ): Promise<HistoricalFactCheck> {
-  const requiredSources = request.requiredSources || 3;
+  const requiredSources = request.requiredSources || 5; // 5개 이상으로 강화
 
   const prompt = `당신은 역사학 박사이자 사료 검증 전문가입니다.
 다음 역사적 사실에 대해 ${requiredSources}개 이상의 공신력 있는 출처를 바탕으로 검증해주세요.
@@ -469,4 +470,373 @@ export function generateResearchSummaryForPrompt(
   }
 
   return summary;
+}
+
+// ============================================
+// 역사 인물 전용 검증 시스템 (v2.0 추가)
+// ============================================
+
+/**
+ * 역사 인물 검증 결과
+ */
+export interface HistoricalPersonVerification {
+  name: string;
+  verified: boolean;
+  confidence: number;
+  identity: {
+    fullName: string;
+    birthYear?: string;
+    deathYear?: string;
+    gender: '남' | '여' | '불명';
+    occupation: string[];
+    titles: string[];
+    alternateNames: string[];
+    notToBe: string[]; // 혼동하면 안 되는 다른 인물들
+  };
+  biography: {
+    birthPlace?: string;
+    majorEvents: { year: string; event: string }[];
+    achievements: string[];
+    deathCause?: string;
+    deathPlace?: string;
+  };
+  relationships: {
+    name: string;
+    relation: string;
+    verified: boolean;
+  }[];
+  sources: VerifiedSource[];
+  warnings: string[];
+  commonConfusions: string[]; // 자주 혼동되는 다른 인물 정보
+}
+
+/**
+ * 역사 인물을 5개 이상의 공신력 있는 출처에서 철저히 검증합니다.
+ * 동명이인, 유사 이름 인물과의 혼동을 방지합니다.
+ */
+export async function verifyHistoricalPerson(
+  apiKey: string,
+  personName: string,
+  era: string,
+  context?: string,
+  model: GeminiModel = 'gemini-3-flash-preview'
+): Promise<HistoricalPersonVerification> {
+  const prompt = `당신은 역사학 박사이자 인물 사료 검증 전문가입니다.
+다음 역사 인물에 대해 **5개 이상**의 공신력 있는 출처를 바탕으로 철저히 검증해주세요.
+
+## 🚨 검증 대상 인물
+이름: "${personName}"
+시대: ${era}
+${context ? `맥락: ${context}` : ''}
+
+## 🚨 핵심 검증 원칙 (반드시 준수!)
+1. **동명이인 구별 필수**: 같은 이름의 다른 인물이 있다면 명확히 구별
+2. **유사 이름 주의**: 비슷한 이름의 다른 인물(예: 황진 ≠ 황진이)과 절대 혼동 금지
+3. **성별 확인 필수**: 인물의 성별을 1차 사료로 반드시 확인
+4. **직업/신분 확인 필수**: 인물의 실제 직업과 신분을 검증
+5. **최소 5개 이상의 공신력 있는 출처 확보**
+
+## 필수 검증 출처 (5개 이상 필수!)
+1. 조선왕조실록 / 삼국사기 / 고려사 (1차 사료)
+2. 한국민족문화대백과사전
+3. 국사편찬위원회 자료
+4. 한국학중앙연구원 자료
+5. 규장각한국학연구원 / 국립중앙박물관 자료
+
+## 혼동 주의 사례
+- "황진" 검색 시: 황진(장군, 임진왜란) ≠ 황진이(기생, 조선 중기)
+- "이순신" 검색 시: 이순신(충무공) ≠ 이순신(동명이인 다수)
+- "김유신" 검색 시: 시대와 직책 확인 필수
+
+## 응답 형식 (JSON)
+{
+  "name": "검증된 정확한 이름",
+  "verified": true/false,
+  "confidence": 0-100,
+  "identity": {
+    "fullName": "정확한 전체 이름 (본명, 자, 호 포함)",
+    "birthYear": "출생년도 (예: 1550)",
+    "deathYear": "사망년도 (예: 1593)",
+    "gender": "남/여/불명",
+    "occupation": ["직업1", "직업2"],
+    "titles": ["관직1", "관직2", "시호 등"],
+    "alternateNames": ["자", "호", "별명 등"],
+    "notToBe": ["혼동하면 안 되는 다른 인물 이름들"]
+  },
+  "biography": {
+    "birthPlace": "출생지",
+    "majorEvents": [
+      { "year": "1592", "event": "임진왜란 참전" }
+    ],
+    "achievements": ["주요 업적1", "주요 업적2"],
+    "deathCause": "사망 원인",
+    "deathPlace": "사망 장소"
+  },
+  "relationships": [
+    { "name": "관계인 이름", "relation": "관계 (아버지, 스승 등)", "verified": true }
+  ],
+  "sources": [
+    {
+      "name": "출처명",
+      "category": "primary/academic/official/encyclopedia/museum",
+      "reliability": 1-10,
+      "finding": "해당 출처에서 발견한 내용",
+      "citation": "구체적 인용 정보",
+      "agrees": true
+    }
+  ],
+  "warnings": ["주의사항"],
+  "commonConfusions": ["자주 혼동되는 다른 인물에 대한 설명"]
+}
+
+⚠️ 반드시 5개 이상의 출처를 포함하세요!
+⚠️ 동명이인이나 유사 이름 인물이 있다면 commonConfusions에 명시하세요!
+⚠️ 성별, 직업, 시대가 다른 인물과 절대 혼동하지 마세요!
+
+JSON만 출력하세요.`;
+
+  try {
+    const result = await generateJSON<HistoricalPersonVerification>(apiKey, prompt, {
+      model,
+      temperature: 0.2, // 사실 검증은 매우 낮은 temperature
+      maxTokens: 8000,
+    });
+
+    // 출처 수 검증
+    if (result.sources.length < 5) {
+      result.warnings.push(`출처가 ${result.sources.length}개로 부족합니다. 5개 이상 필요합니다.`);
+      result.confidence = Math.min(result.confidence, 60);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[ResearchValidator] 인물 검증 실패:', error);
+    return {
+      name: personName,
+      verified: false,
+      confidence: 0,
+      identity: {
+        fullName: personName,
+        gender: '불명',
+        occupation: [],
+        titles: [],
+        alternateNames: [],
+        notToBe: [],
+      },
+      biography: {
+        majorEvents: [],
+        achievements: [],
+      },
+      relationships: [],
+      sources: [],
+      warnings: ['자동 검증 실패 - 수동 확인 필요'],
+      commonConfusions: [],
+    };
+  }
+}
+
+/**
+ * 여러 역사 인물을 일괄 검증합니다.
+ */
+export async function verifyMultiplePersons(
+  apiKey: string,
+  personNames: string[],
+  era: string,
+  model: GeminiModel = 'gemini-3-flash-preview'
+): Promise<HistoricalPersonVerification[]> {
+  const results: HistoricalPersonVerification[] = [];
+
+  for (const name of personNames) {
+    const result = await verifyHistoricalPerson(apiKey, name, era, undefined, model);
+    results.push(result);
+
+    // Rate limit 방지
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
+  return results;
+}
+
+/**
+ * 기획 단계에서 역사 인물을 검증하고 캐릭터 정보를 생성합니다.
+ */
+export async function verifyAndGenerateHistoricalCharacter(
+  apiKey: string,
+  personName: string,
+  era: string,
+  role: 'protagonist' | 'antagonist' | 'supporting' | 'minor',
+  model: GeminiModel = 'gemini-3-flash-preview'
+): Promise<{
+  verification: HistoricalPersonVerification;
+  characterTemplate: {
+    name: string;
+    fullName: string;
+    role: string;
+    gender: string;
+    age: string;
+    occupation: string;
+    personality: string;
+    background: string;
+    motivation: string;
+    speechPattern: string;
+    warnings: string[];
+  };
+}> {
+  // 1단계: 인물 검증
+  const verification = await verifyHistoricalPerson(apiKey, personName, era, undefined, model);
+
+  // 2단계: 검증 결과 기반 캐릭터 템플릿 생성
+  if (!verification.verified || verification.confidence < 70) {
+    return {
+      verification,
+      characterTemplate: {
+        name: personName,
+        fullName: personName,
+        role,
+        gender: '불명',
+        age: '불명',
+        occupation: '미확인',
+        personality: '검증 필요',
+        background: '검증 필요',
+        motivation: '검증 필요',
+        speechPattern: '검증 필요',
+        warnings: [
+          '⚠️ 이 인물에 대한 충분한 검증이 이루어지지 않았습니다.',
+          '⚠️ 5개 이상의 공신력 있는 출처에서 수동 확인이 필요합니다.',
+          ...verification.warnings,
+        ],
+      },
+    };
+  }
+
+  // 검증된 정보로 캐릭터 템플릿 생성
+  const prompt = `검증된 역사 인물 정보를 바탕으로 소설 캐릭터 템플릿을 생성해주세요.
+
+## 검증된 인물 정보
+${JSON.stringify(verification, null, 2)}
+
+## 역할: ${role}
+
+## 응답 형식 (JSON)
+{
+  "personality": "검증된 사료에 기반한 성격 묘사 (3-5문장)",
+  "motivation": "역사적 배경에 맞는 동기",
+  "speechPattern": "시대와 신분에 맞는 말투 특징",
+  "additionalNotes": "소설 집필 시 주의사항"
+}
+
+역사적 사실에 충실하되, 소설적으로 활용 가능하게 작성해주세요.
+JSON만 출력하세요.`;
+
+  try {
+    const template = await generateJSON<{
+      personality: string;
+      motivation: string;
+      speechPattern: string;
+      additionalNotes: string;
+    }>(apiKey, prompt, { model, temperature: 0.5 });
+
+    return {
+      verification,
+      characterTemplate: {
+        name: verification.name,
+        fullName: verification.identity.fullName,
+        role,
+        gender: verification.identity.gender,
+        age: verification.identity.birthYear && verification.identity.deathYear
+          ? `${verification.identity.birthYear}~${verification.identity.deathYear}`
+          : '미상',
+        occupation: verification.identity.occupation.join(', ') || '미상',
+        personality: template.personality,
+        background: verification.biography.achievements.join('. ') || '미상',
+        motivation: template.motivation,
+        speechPattern: template.speechPattern,
+        warnings: [
+          ...verification.warnings,
+          ...verification.commonConfusions.map(c => `⚠️ 혼동 주의: ${c}`),
+          template.additionalNotes,
+        ],
+      },
+    };
+  } catch (error) {
+    console.error('[ResearchValidator] 캐릭터 템플릿 생성 실패:', error);
+    return {
+      verification,
+      characterTemplate: {
+        name: verification.name,
+        fullName: verification.identity.fullName,
+        role,
+        gender: verification.identity.gender,
+        age: '미상',
+        occupation: verification.identity.occupation.join(', ') || '미상',
+        personality: '검증됨 - 상세 생성 실패',
+        background: verification.biography.achievements.join('. ') || '미상',
+        motivation: '검증됨 - 상세 생성 실패',
+        speechPattern: '검증됨 - 상세 생성 실패',
+        warnings: verification.warnings,
+      },
+    };
+  }
+}
+
+/**
+ * 인물 혼동 여부를 빠르게 확인합니다.
+ */
+export async function checkPersonConfusion(
+  apiKey: string,
+  personName: string,
+  intendedDescription: string,
+  model: GeminiModel = 'gemini-3-flash-preview'
+): Promise<{
+  isConfused: boolean;
+  intendedPerson: string;
+  confusedWith: string[];
+  explanation: string;
+  correction: string;
+}> {
+  const prompt = `당신은 역사 인물 전문가입니다.
+다음 인물 설명에 혼동이 있는지 확인해주세요.
+
+## 인물 이름: ${personName}
+## 작성된 설명: ${intendedDescription}
+
+## 확인 사항
+1. 이 설명이 실제 "${personName}"에 해당하는지 확인
+2. 동명이인이나 유사 이름 인물과 혼동되었는지 확인
+3. 성별, 직업, 시대가 맞는지 확인
+
+## 주요 혼동 사례
+- 황진(장군) ≠ 황진이(기생)
+- 이순신(충무공) ≠ 다른 이순신
+- 김유신(신라 장군) ≠ 다른 김유신
+
+## 응답 형식 (JSON)
+{
+  "isConfused": true/false,
+  "intendedPerson": "작성자가 의도한 것으로 보이는 인물",
+  "confusedWith": ["혼동된 인물들"],
+  "explanation": "혼동 발생 이유 또는 정확한 이유",
+  "correction": "수정 제안 (혼동이 있는 경우)"
+}
+
+JSON만 출력하세요.`;
+
+  try {
+    return await generateJSON<{
+      isConfused: boolean;
+      intendedPerson: string;
+      confusedWith: string[];
+      explanation: string;
+      correction: string;
+    }>(apiKey, prompt, { model, temperature: 0.2 });
+  } catch (error) {
+    console.error('[ResearchValidator] 혼동 확인 실패:', error);
+    return {
+      isConfused: false,
+      intendedPerson: personName,
+      confusedWith: [],
+      explanation: '자동 확인 실패',
+      correction: '수동 확인 필요',
+    };
+  }
 }

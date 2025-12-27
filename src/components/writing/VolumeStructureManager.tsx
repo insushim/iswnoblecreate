@@ -215,6 +215,8 @@ ${plotSummary}
 3. 모호한 표현(성장한다, 변화한다, 깨닫는다) 대신 구체적인 장면 제시
 4. 플롯 포인트를 적절히 배분
 5. 캐릭터의 성장 아크 반영
+6. ⛔ 빈 괄호() 사용 금지 - "천군()"처럼 빈 괄호 절대 금지
+7. ⛔ 불필요한 특수문자 사용 금지 - 제목에 괄호, 물음표, 느낌표 등 최소화
 
 JSON 형식:
 [
@@ -275,15 +277,35 @@ povType: first(1인칭), third-limited(3인칭 제한), omniscient(전지적)`;
       // 생성된 권과 씬 저장
       for (let i = 0; i < result.length; i++) {
         const vol = result[i];
+
+        // 이전 권 요약 자동 생성 (2권 이상)
+        let previousVolumeSummary = '';
+        if (i > 0) {
+          const prevVol = result[i - 1];
+          previousVolumeSummary = `${prevVol.title}: ${prevVol.coreEvent}. 종료: ${prevVol.endPoint}`;
+        }
+
+        // 다음 권 예고 자동 생성 (마지막 권 제외)
+        let nextVolumePreview = '';
+        if (i < result.length - 1) {
+          const nextVol = result[i + 1];
+          nextVolumePreview = `${nextVol.title}: ${nextVol.coreEvent}`;
+        }
+
+        // 빈 괄호 제거 (title에서)
+        const cleanTitle = vol.title.replace(/\(\s*\)/g, '').trim();
+
         const newVolume = await createVolume(projectId, {
           volumeNumber: i + 1,
-          title: vol.title,
+          title: cleanTitle,
           targetWordCount: vol.targetWordCount || 195000,
           startPoint: vol.startPoint,
           coreEvent: vol.coreEvent,
           endPoint: vol.endPoint,
           endPointType: vol.endPointType || 'dialogue',
           endPointExact: vol.endPointExact,
+          previousVolumeSummary,
+          nextVolumePreview,
           status: 'planning',
         });
 
@@ -291,13 +313,18 @@ povType: first(1인칭), third-limited(3인칭 제한), omniscient(전지적)`;
         if (newVolume && vol.scenes && vol.scenes.length > 0) {
           for (let j = 0; j < vol.scenes.length; j++) {
             const scene = vol.scenes[j];
+            // 빈 괄호 제거 (씬 title, pov 등에서)
+            const cleanSceneTitle = scene.title.replace(/\(\s*\)/g, '').trim();
+            const cleanPov = (scene.pov || '').replace(/\(\s*\)/g, '').trim();
+            const cleanLocation = (scene.location || '').replace(/\(\s*\)/g, '').trim();
+
             await createScene(newVolume.id, {
               sceneNumber: j + 1,
-              title: scene.title,
+              title: cleanSceneTitle,
               targetWordCount: scene.targetWordCount || 18000,
-              pov: scene.pov || '',
+              pov: cleanPov,
               povType: scene.povType || 'third-limited',
-              location: scene.location || '',
+              location: cleanLocation,
               timeframe: scene.timeframe || '',
               startCondition: scene.startCondition || '',
               mustInclude: scene.mustInclude || [],
@@ -374,6 +401,8 @@ ${volume.volumeNumber}권의 구조와 8-12개의 씬을 재생성해주세요.
 1. 권은 19-20만자 분량 (각 씬은 1.5-2만자)
 2. 종료점은 반드시 구체적인 대사나 행동으로 명시
 3. 모호한 표현 대신 구체적인 장면 제시
+4. ⛔ 빈 괄호() 사용 금지 - "천군()"처럼 빈 괄호 절대 금지
+5. ⛔ 불필요한 특수문자 사용 금지 - 제목에 괄호, 물음표, 느낌표 등 최소화
 
 JSON 형식 (단일 객체):
 {
@@ -426,27 +455,49 @@ endPointType/endConditionType: dialogue(대사), action(행동), narration(서�
         }>;
       }>(settings.geminiApiKey, prompt, { temperature: 0.8, maxTokens: 16000, model: settings.planningModel || 'gemini-3-flash-preview' });
 
+      // 빈 괄호 제거
+      const cleanTitle = result.title.replace(/\(\s*\)/g, '').trim();
+
+      // 이전 권 요약 자동 생성
+      let previousVolumeSummary = '';
+      if (prevVolume) {
+        previousVolumeSummary = `${prevVolume.title}: ${prevVolume.coreEvent}. 종료: ${prevVolume.endPoint}`;
+      }
+
+      // 다음 권 예고 자동 생성
+      let nextVolumePreview = '';
+      if (nextVolume) {
+        nextVolumePreview = `${nextVolume.title}: ${nextVolume.coreEvent || nextVolume.startPoint}`;
+      }
+
       await updateVolume(volumeId, {
-        title: result.title,
+        title: cleanTitle,
         targetWordCount: result.targetWordCount || 195000,
         startPoint: result.startPoint,
         coreEvent: result.coreEvent,
         endPoint: result.endPoint,
         endPointType: result.endPointType || 'dialogue',
         endPointExact: result.endPointExact,
+        previousVolumeSummary,
+        nextVolumePreview,
       });
 
       // 씬 생성
       if (result.scenes && result.scenes.length > 0) {
         for (let j = 0; j < result.scenes.length; j++) {
           const scene = result.scenes[j];
+          // 빈 괄호 제거
+          const cleanSceneTitle = scene.title.replace(/\(\s*\)/g, '').trim();
+          const cleanPov = (scene.pov || '').replace(/\(\s*\)/g, '').trim();
+          const cleanLocation = (scene.location || '').replace(/\(\s*\)/g, '').trim();
+
           await createScene(volumeId, {
             sceneNumber: j + 1,
-            title: scene.title,
+            title: cleanSceneTitle,
             targetWordCount: scene.targetWordCount || 18000,
-            pov: scene.pov || '',
+            pov: cleanPov,
             povType: scene.povType || 'third-limited',
-            location: scene.location || '',
+            location: cleanLocation,
             timeframe: scene.timeframe || '',
             startCondition: scene.startCondition || '',
             mustInclude: scene.mustInclude || [],
