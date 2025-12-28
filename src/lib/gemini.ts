@@ -4,19 +4,23 @@ import { GeminiModel } from '@/types';
 // Gemini API 클라이언트
 let genAI: GoogleGenerativeAI | null = null;
 
-// 모델별 가격 정보 (참고용)
+// 모델별 가격 정보 (참고용) - Pro 모델 추가
 export const MODEL_PRICING = {
-  'gemini-3-flash-preview': { input: 0.50, output: 3.00, description: '최신 고품질 모델 (유료)' },
-  'gemini-2.5-flash': { input: 0.15, output: 0.60, description: '고성능 모델 (유료)' },
-  'gemini-2.0-flash': { input: 0, output: 0, description: '무료 모델 (추천)' },
-  'gemini-1.5-flash': { input: 0.075, output: 0.30, description: '경량 모델 (유료)' },
+  'gemini-2.5-pro': { input: 1.25, output: 5.00, description: '⭐최고 품질 Pro (긴 소설 추천)' },
+  'gemini-1.5-pro': { input: 1.25, output: 5.00, description: '안정적 Pro 모델' },
+  'gemini-3-flash-preview': { input: 0.50, output: 3.00, description: '최신 고품질 모델' },
+  'gemini-2.5-flash': { input: 0.15, output: 0.60, description: '고성능 Flash 모델' },
+  'gemini-2.0-flash': { input: 0, output: 0, description: '무료 모델' },
+  'gemini-1.5-flash': { input: 0.075, output: 0.30, description: '경량 모델' },
 } as const;
 
-// 모델 옵션 (UI용)
-export const MODEL_OPTIONS: { value: GeminiModel; label: string; description: string; price: string }[] = [
-  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', description: '최신 고품질 모델', price: '$0.50/$3.00 (1M 토큰)' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: '고성능 모델', price: '$0.15/$0.60 (1M 토큰)' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: '무료 모델 (추천)', price: '무료' },
+// 모델 옵션 (UI용) - Pro 모델 추가
+export const MODEL_OPTIONS: { value: GeminiModel; label: string; description: string; price: string; recommended?: string }[] = [
+  { value: 'gemini-2.5-pro', label: '⭐ Gemini 2.5 Pro', description: '최고 품질 - 긴 소설, 복잡한 스토리에 최적', price: '$1.25/$5.00 (1M 토큰)', recommended: '소설 작성 추천' },
+  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', description: '안정적 Pro - 일관성 우수', price: '$1.25/$5.00 (1M 토큰)' },
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', description: '최신 프리뷰 모델', price: '$0.50/$3.00 (1M 토큰)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: '고성능 Flash', price: '$0.15/$0.60 (1M 토큰)' },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: '무료 모델 (테스트용)', price: '무료' },
   { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', description: '경량 모델', price: '$0.075/$0.30 (1M 토큰)' },
 ];
 

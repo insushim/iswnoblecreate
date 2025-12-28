@@ -597,8 +597,14 @@ export interface WritingSession {
   notes?: string;
 }
 
-// Gemini 모델 타입
-export type GeminiModel = 'gemini-2.0-flash' | 'gemini-3-flash-preview' | 'gemini-2.5-flash' | 'gemini-1.5-flash';
+// Gemini 모델 타입 (Pro 모델 추가 - 긴 소설 작성에 적합)
+export type GeminiModel =
+  | 'gemini-2.0-flash'      // 무료 기본 모델
+  | 'gemini-2.5-flash'      // 유료 고성능
+  | 'gemini-2.5-pro'        // 유료 최고 품질 (긴 컨텍스트, 복잡한 소설에 추천)
+  | 'gemini-1.5-pro'        // 유료 안정적 Pro 모델
+  | 'gemini-1.5-flash'      // 유료 경량
+  | 'gemini-3-flash-preview'; // 최신 프리뷰
 
 // 앱 설정
 export interface AppSettings {

@@ -251,15 +251,24 @@ export default function SettingsPage() {
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>• 기획 10회 ({settings?.planningModel || 'gemini-3-flash-preview'}):
                   {settings?.planningModel === 'gemini-2.0-flash' ? ' 무료' :
+                   settings?.planningModel === 'gemini-2.5-pro' ? ' ~$1.50 ⭐최고품질' :
+                   settings?.planningModel === 'gemini-1.5-pro' ? ' ~$1.50' :
                    settings?.planningModel === 'gemini-3-flash-preview' ? ' ~$0.95' :
                    settings?.planningModel === 'gemini-2.5-flash' ? ' ~$0.20' : ' ~$0.10'}
                 </p>
                 <p>• 집필 50회 ({settings?.writingModel || 'gemini-2.0-flash'}):
                   {settings?.writingModel === 'gemini-2.0-flash' ? ' 무료' :
+                   settings?.writingModel === 'gemini-2.5-pro' ? ' ~$17.50 ⭐긴소설추천' :
+                   settings?.writingModel === 'gemini-1.5-pro' ? ' ~$17.50' :
                    settings?.writingModel === 'gemini-3-flash-preview' ? ' ~$10.50' :
                    settings?.writingModel === 'gemini-2.5-flash' ? ' ~$2.10' : ' ~$1.05'}
                 </p>
               </div>
+              {(settings?.writingModel === 'gemini-2.5-pro' || settings?.writingModel === 'gemini-1.5-pro') && (
+                <p className="text-xs text-green-600 mt-2">
+                  💡 Pro 모델은 긴 컨텍스트를 잘 기억해서 스토리 일관성이 우수합니다!
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

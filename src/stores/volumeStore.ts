@@ -2,6 +2,7 @@
  * 권(Volume) 구조 관리 Store
  * - 권/씬 단위 소설 구조 관리
  * - 종료점 기반 집필 시스템
+ * - 씬별 프롬프트 자동 생성
  */
 
 import { create } from 'zustand';
@@ -11,6 +12,10 @@ import type {
   SceneStructure,
   VolumeProgress,
   ProjectWritingProgress,
+  Project,
+  Character,
+  WorldSetting,
+  WritingStyle,
 } from '@/types';
 import {
   createDefaultVolumeStructure,
@@ -18,12 +23,20 @@ import {
   autoSplitVolumeIntoScenes,
   calculateProjectProgress,
 } from '@/lib/promptGenerator';
+import {
+  ScenePromptData,
+  generateScenePrompt,
+  generateAllScenePrompts,
+  HWANGJIN_VOLUME_1_SCENES,
+  templateToSceneStructure,
+} from '@/lib/scenePromptGenerator';
 
 interface VolumeStore {
   // 상태
   volumes: VolumeStructure[];
   currentVolume: VolumeStructure | null;
   currentScene: SceneStructure | null;
+  scenePrompts: Map<string, ScenePromptData>; // 씬별 프롬프트 캐시
   isLoading: boolean;
   error: string | null;
 
@@ -55,6 +68,32 @@ interface VolumeStore {
   updateWordCount: (sceneId: string, wordCount: number) => Promise<void>;
   markSceneComplete: (sceneId: string) => Promise<void>;
   markVolumeComplete: (volumeId: string) => Promise<void>;
+
+  // 🆕 씬 프롬프트 생성 기능
+  generateScenePrompt: (
+    sceneId: string,
+    project: Project,
+    characters: Character[],
+    worldSettings: WorldSetting[],
+    style: WritingStyle,
+    previousContent?: string
+  ) => ScenePromptData | null;
+
+  generateAllScenePrompts: (
+    volumeId: string,
+    project: Project,
+    characters: Character[],
+    worldSettings: WorldSetting[],
+    style: WritingStyle
+  ) => ScenePromptData[];
+
+  getScenePrompt: (sceneId: string) => ScenePromptData | null;
+
+  // 🆕 황진 템플릿 적용
+  applyHwangjinTemplate: (volumeId: string) => Promise<void>;
+
+  // 🆕 씬 일괄 생성 (템플릿에서)
+  bulkCreateScenes: (volumeId: string, scenes: Partial<SceneStructure>[]) => Promise<void>;
 }
 
 export const useVolumeStore = create<VolumeStore>()(
@@ -63,6 +102,7 @@ export const useVolumeStore = create<VolumeStore>()(
       volumes: [],
       currentVolume: null,
       currentScene: null,
+      scenePrompts: new Map<string, ScenePromptData>(),
       isLoading: false,
       error: null,
 
@@ -354,6 +394,172 @@ export const useVolumeStore = create<VolumeStore>()(
         if (allScenesCompleted) {
           await get().updateVolume(volumeId, { status: 'completed' });
         }
+      },
+
+      // 🆕 씬 프롬프트 생성
+      generateScenePrompt: (
+        sceneId: string,
+        project: Project,
+        characters: Character[],
+        worldSettings: WorldSetting[],
+        style: WritingStyle,
+        previousContent?: string
+      ): ScenePromptData | null => {
+        const state = get();
+        let targetVolume: VolumeStructure | null = null;
+        let targetScene: SceneStructure | null = null;
+
+        // 씬이 속한 권 찾기
+        for (const volume of state.volumes) {
+          const scene = volume.scenes.find(s => s.id === sceneId);
+          if (scene) {
+            targetVolume = volume;
+            targetScene = scene;
+            break;
+          }
+        }
+
+        if (!targetVolume || !targetScene) return null;
+
+        // 프롬프트 생성
+        const promptData = generateScenePrompt(
+          project,
+          targetVolume,
+          targetScene,
+          style,
+          characters,
+          worldSettings,
+          targetVolume.scenes,
+          previousContent
+        );
+
+        // 캐시에 저장
+        const newPrompts = new Map(state.scenePrompts);
+        newPrompts.set(sceneId, promptData);
+        set({ scenePrompts: newPrompts });
+
+        return promptData;
+      },
+
+      // 🆕 권의 모든 씬 프롬프트 일괄 생성
+      generateAllScenePrompts: (
+        volumeId: string,
+        project: Project,
+        characters: Character[],
+        worldSettings: WorldSetting[],
+        style: WritingStyle
+      ): ScenePromptData[] => {
+        const volume = get().volumes.find(v => v.id === volumeId);
+        if (!volume) return [];
+
+        const prompts = generateAllScenePrompts(
+          project,
+          volume,
+          style,
+          characters,
+          worldSettings
+        );
+
+        // 캐시에 저장
+        const newPrompts = new Map(get().scenePrompts);
+        prompts.forEach(p => {
+          newPrompts.set(p.sceneId, p);
+        });
+        set({ scenePrompts: newPrompts });
+
+        return prompts;
+      },
+
+      // 🆕 캐시된 씬 프롬프트 조회
+      getScenePrompt: (sceneId: string): ScenePromptData | null => {
+        return get().scenePrompts.get(sceneId) || null;
+      },
+
+      // 🆕 황진 1권 템플릿 적용
+      applyHwangjinTemplate: async (volumeId: string) => {
+        const volume = get().volumes.find(v => v.id === volumeId);
+        if (!volume) throw new Error('권을 찾을 수 없습니다');
+
+        // 템플릿에서 씬 생성
+        const scenes = HWANGJIN_VOLUME_1_SCENES.map(template =>
+          templateToSceneStructure(template, volumeId)
+        );
+
+        // 권 업데이트 (씬 추가 + 메타데이터)
+        const totalWordCount = scenes.reduce((sum, s) => sum + s.targetWordCount, 0);
+
+        set(state => ({
+          volumes: state.volumes.map(v =>
+            v.id === volumeId
+              ? {
+                  ...v,
+                  title: '빙의, 그리고 시작',
+                  targetWordCount: totalWordCount,
+                  startPoint: '강민우가 유튜브 스튜디오에서 황진 장군 강의를 진행한다',
+                  endPoint: '강민우(황진)가 달빛 아래 정체성 통합을 선언한다',
+                  endPointType: 'dialogue' as const,
+                  endPointExact: '강민우도, 황진도... 이제 하나다. 이 세계에서 내가 할 수 있는 모든 것을 하겠다',
+                  coreEvent: '현대 역사 강사 강민우가 조선시대 황진 장군의 몸에 빙의하여 새로운 삶을 시작한다',
+                  scenes,
+                  updatedAt: new Date(),
+                }
+              : v
+          ),
+          currentVolume: state.currentVolume?.id === volumeId
+            ? {
+                ...state.currentVolume,
+                title: '빙의, 그리고 시작',
+                targetWordCount: totalWordCount,
+                startPoint: '강민우가 유튜브 스튜디오에서 황진 장군 강의를 진행한다',
+                endPoint: '강민우(황진)가 달빛 아래 정체성 통합을 선언한다',
+                endPointType: 'dialogue' as const,
+                endPointExact: '강민우도, 황진도... 이제 하나다. 이 세계에서 내가 할 수 있는 모든 것을 하겠다',
+                coreEvent: '현대 역사 강사 강민우가 조선시대 황진 장군의 몸에 빙의하여 새로운 삶을 시작한다',
+                scenes,
+                updatedAt: new Date(),
+              }
+            : state.currentVolume,
+        }));
+      },
+
+      // 🆕 씬 일괄 생성
+      bulkCreateScenes: async (volumeId: string, scenesData: Partial<SceneStructure>[]) => {
+        const volume = get().volumes.find(v => v.id === volumeId);
+        if (!volume) throw new Error('권을 찾을 수 없습니다');
+
+        const newScenes: SceneStructure[] = scenesData.map((data, index) => ({
+          id: crypto.randomUUID(),
+          volumeId,
+          sceneNumber: index + 1,
+          title: data.title || `씬 ${index + 1}`,
+          targetWordCount: data.targetWordCount || 10000,
+          pov: data.pov || '',
+          povType: data.povType || 'third-limited',
+          location: data.location || '',
+          timeframe: data.timeframe || '',
+          participants: data.participants || [],
+          mustInclude: data.mustInclude || [],
+          startCondition: data.startCondition || '',
+          endCondition: data.endCondition || '',
+          endConditionType: data.endConditionType || 'dialogue',
+          status: 'pending',
+          actualWordCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+
+        const totalWordCount = newScenes.reduce((sum, s) => sum + s.targetWordCount, 0);
+
+        set(state => ({
+          volumes: state.volumes.map(v =>
+            v.id === volumeId
+              ? { ...v, scenes: newScenes, targetWordCount: totalWordCount, updatedAt: new Date() }
+              : v
+          ),
+          currentVolume: state.currentVolume?.id === volumeId
+            ? { ...state.currentVolume, scenes: newScenes, targetWordCount: totalWordCount, updatedAt: new Date() }
+            : state.currentVolume,
+        }));
       },
     }),
     {
