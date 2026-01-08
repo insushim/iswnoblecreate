@@ -104,10 +104,22 @@ export default function PlanningPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
 
-  // 총 목표 글자수 자동 계산 (챕터 수 × 챕터당 글자수)
-  const calculatedTotalLength = targetChapterCount * targetChapterLength;
-  // 예상 권수 계산 (1권 = 약 20만자 기준)
-  const estimatedBooks = Math.ceil(calculatedTotalLength / 200000);
+  // 🆕 권 수 기반 자동 계산 시스템
+  const [targetVolumeCount, setTargetVolumeCount] = useState(10); // 목표 권 수
+  const [wordsPerVolume, setWordsPerVolume] = useState(200000); // 권당 글자수 (기본 20만)
+  const [chaptersPerVolume, setChaptersPerVolume] = useState(10); // 권당 챕터 수
+  const [scenesPerChapter, setScenesPerChapter] = useState(5); // 챕터당 씬 수
+  const [autoCalculateMode, setAutoCalculateMode] = useState(true); // AI 자동 계산 모드
+
+  // 🆕 권 수 기반 자동 계산
+  const calculatedTotalLength = targetVolumeCount * wordsPerVolume;
+  const calculatedChapterCount = targetVolumeCount * chaptersPerVolume;
+  const calculatedTotalScenes = calculatedChapterCount * scenesPerChapter;
+  const wordsPerScene = Math.floor(wordsPerVolume / (chaptersPerVolume * scenesPerChapter));
+  const wordsPerChapter = Math.floor(wordsPerVolume / chaptersPerVolume);
+
+  // 기존 호환성 유지
+  const estimatedBooks = targetVolumeCount;
   const [autoGenerateProgress, setAutoGenerateProgress] = useState<{
     step: string;
     current: number;
@@ -298,35 +310,55 @@ export default function PlanningPage() {
   };
 
   // 단계별 생성 함수들
-  // 분량 라벨 생성 (새로운 기준: 단편 20만+, 중편 60만+, 장편 100만+, 대작 200만+, 시리즈 400만+)
+  // 분량 라벨 생성 (권 수 기반)
   const getLengthLabel = () => {
-    if (calculatedTotalLength < 200000) return `습작 (${Math.floor(calculatedTotalLength / 10000)}만자)`;
-    if (calculatedTotalLength < 600000) return `단편 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
-    if (calculatedTotalLength < 1000000) return `중편 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
-    if (calculatedTotalLength < 2000000) return `장편 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
-    if (calculatedTotalLength < 4000000) return `대작 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
-    return `시리즈급 (${Math.floor(calculatedTotalLength / 10000)}만자, 약 ${estimatedBooks}권)`;
+    const totalMan = Math.floor(calculatedTotalLength / 10000);
+    if (targetVolumeCount <= 1) return `단권 (${totalMan}만자)`;
+    if (targetVolumeCount <= 3) return `단편 시리즈 (${totalMan}만자, ${targetVolumeCount}권)`;
+    if (targetVolumeCount <= 5) return `중편 시리즈 (${totalMan}만자, ${targetVolumeCount}권)`;
+    if (targetVolumeCount <= 10) return `장편 시리즈 (${totalMan}만자, ${targetVolumeCount}권)`;
+    if (targetVolumeCount <= 20) return `대작 시리즈 (${totalMan}만자, ${targetVolumeCount}권)`;
+    return `대하 시리즈 (${totalMan}만자, ${targetVolumeCount}권)`;
   };
 
-  // 분량에 따른 권장 구성 정보
+  // 🆕 권 수에 따른 AI 권장 구성 계산
+  const getAIRecommendedStructure = (volumes: number) => {
+    // 장르별, 분량별 최적 구성 계산
+    const isAction = selectedGenres.some(g => ['액션', '무협', '판타지', '스릴러'].includes(g));
+    const isRomance = selectedGenres.some(g => ['로맨스', '드라마', '성장물'].includes(g));
+
+    // 권당 챕터 수 (액션물은 짧고 많은 챕터, 로맨스는 길고 적은 챕터)
+    let recommendedChaptersPerVolume = isAction ? 12 : isRomance ? 8 : 10;
+
+    // 챕터당 씬 수 (긴박한 장르는 씬이 많음)
+    let recommendedScenesPerChapter = isAction ? 6 : isRomance ? 4 : 5;
+
+    // 씬당 글자수 (2000~5000자 범위 유지)
+    const targetWordsPerScene = 3500; // 평균 3500자
+    const adjustedWordsPerVolume = recommendedChaptersPerVolume * recommendedScenesPerChapter * targetWordsPerScene;
+
+    return {
+      chaptersPerVolume: recommendedChaptersPerVolume,
+      scenesPerChapter: recommendedScenesPerChapter,
+      wordsPerVolume: Math.min(250000, Math.max(150000, adjustedWordsPerVolume)), // 15만~25만자 범위
+      totalChapters: volumes * recommendedChaptersPerVolume,
+      totalScenes: volumes * recommendedChaptersPerVolume * recommendedScenesPerChapter,
+      characters: Math.min(30, 5 + volumes * 2), // 권당 2명씩 증가, 최대 30명
+      worldSettings: Math.min(12, 4 + Math.floor(volumes / 2)), // 권당 0.5개씩 증가
+      plotPoints: Math.min(25, 5 + volumes), // 권당 1개씩 증가
+    };
+  };
+
+  // 🆕 권 수 기반 권장 구성 정보
   const getRecommendedConfig = () => {
-    if (calculatedTotalLength < 200000) {
-      return { chapters: 5, characters: 5, worldSettings: 4, plotPoints: 5, scenesPerChapter: 3 };
-    }
-    if (calculatedTotalLength < 600000) { // 단편 20만~60만
-      return { chapters: 10, characters: 8, worldSettings: 6, plotPoints: 8, scenesPerChapter: 5 };
-    }
-    if (calculatedTotalLength < 1000000) { // 중편 60만~100만
-      return { chapters: 20, characters: 12, worldSettings: 8, plotPoints: 10, scenesPerChapter: 6 };
-    }
-    if (calculatedTotalLength < 2000000) { // 장편 100만~200만
-      return { chapters: 30, characters: 15, worldSettings: 10, plotPoints: 12, scenesPerChapter: 8 };
-    }
-    if (calculatedTotalLength < 4000000) { // 대작 200만~400만
-      return { chapters: 50, characters: 20, worldSettings: 12, plotPoints: 15, scenesPerChapter: 10 };
-    }
-    // 시리즈급 400만 이상
-    return { chapters: 100, characters: 25, worldSettings: 15, plotPoints: 20, scenesPerChapter: 12 };
+    const recommended = getAIRecommendedStructure(targetVolumeCount);
+    return {
+      chapters: calculatedChapterCount,
+      characters: recommended.characters,
+      worldSettings: recommended.worldSettings,
+      plotPoints: recommended.plotPoints,
+      scenesPerChapter: scenesPerChapter,
+    };
   };
 
   // 1단계: 로그라인 + 시놉시스 생성
@@ -1125,6 +1157,7 @@ JSON 형식 (반드시 이 형식만 출력):
 [요청]
 이 씬의 설정을 생성해주세요.
 ⚠️ 종료 조건은 구체적인 대사나 행동으로 명시!
+⚠️ participants는 이 씬에 실제로 등장하는 캐릭터만! (언급만 되는 캐릭터 제외)
 
 JSON 형식:
 {
@@ -1132,6 +1165,7 @@ JSON 형식:
   "pov": "시점 캐릭터 이름",
   "location": "장소",
   "timeframe": "시간대",
+  "participants": ["이 씬에 등장하는 캐릭터1", "캐릭터2"],
   "startCondition": "씬 시작 상황",
   "endCondition": "씬 종료 조건 (구체적 대사/행동)",
   "endConditionType": "dialogue 또는 action",
@@ -1144,6 +1178,7 @@ JSON 형식:
               pov: string;
               location: string;
               timeframe: string;
+              participants: string[]; // 🔒 등장인물 필수!
               startCondition: string;
               endCondition: string;
               endConditionType: 'dialogue' | 'action';
@@ -1158,7 +1193,7 @@ JSON 형식:
               povType: 'third-limited',
               location: sceneResult.location || '',
               timeframe: sceneResult.timeframe || '',
-              participants: [],
+              participants: sceneResult.participants || [], // 🔒 AI가 생성한 등장인물 사용!
               mustInclude: sceneResult.mustInclude || [],
               startCondition: sceneResult.startCondition || '',
               endCondition: sceneResult.endCondition || '',
@@ -1367,48 +1402,167 @@ JSON 형식:
               </div>
             </div>
 
-            {/* 목표 분량 설정 */}
-            <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-4">
+            {/* 🆕 권 수 기반 목표 분량 설정 */}
+            <div className="p-4 bg-gradient-to-br from-primary/10 to-purple-500/10 border border-primary/30 rounded-xl space-y-5">
+              {/* 메인 헤더: 총 분량 */}
               <div className="flex items-center justify-between">
-                <span className="font-medium">목표 총 분량</span>
-                <span className="text-xl font-bold text-primary">
-                  {calculatedTotalLength.toLocaleString()}자
-                  <span className="text-sm font-normal text-muted-foreground ml-2">
-                    ({getLengthLabel()})
-                  </span>
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">총 챕터 수</Label>
-                    <span className="text-sm text-muted-foreground">{targetChapterCount}장</span>
+                <div>
+                  <span className="text-sm text-muted-foreground">목표 총 분량</span>
+                  <div className="text-2xl font-bold text-primary">
+                    {calculatedTotalLength.toLocaleString()}자
                   </div>
-                  <Slider
-                    value={[targetChapterCount]}
-                    onValueChange={([v]) => setTargetChapterCount(v)}
-                    min={1}
-                    max={100}
-                    step={1}
-                  />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">챕터당 글자수</Label>
-                    <span className="text-sm text-muted-foreground">{targetChapterLength.toLocaleString()}자</span>
-                  </div>
-                  <Slider
-                    value={[targetChapterLength]}
-                    onValueChange={([v]) => setTargetChapterLength(v)}
-                    min={5000}
-                    max={200000}
-                    step={5000}
-                  />
+                <div className="text-right">
+                  <Badge variant="secondary" className="text-base px-3 py-1">
+                    {getLengthLabel()}
+                  </Badge>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                분량 기준: 단편 20만+ | 중편 60만+ | 장편 100만+ | 대작 200만+ | 시리즈 400만+ (1권 = 20만자)
-              </p>
+
+              {/* 핵심 입력: 권 수 */}
+              <div className="p-4 bg-background/80 rounded-lg border-2 border-primary/40">
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    📚 목표 권 수
+                    <span className="text-xs text-muted-foreground font-normal">(1권 = 약 20만자)</span>
+                  </Label>
+                  <span className="text-2xl font-bold text-primary">{targetVolumeCount}권</span>
+                </div>
+                <Slider
+                  value={[targetVolumeCount]}
+                  onValueChange={([v]) => {
+                    setTargetVolumeCount(v);
+                    // AI 권장 구성 자동 적용
+                    if (autoCalculateMode) {
+                      const recommended = getAIRecommendedStructure(v);
+                      setChaptersPerVolume(recommended.chaptersPerVolume);
+                      setScenesPerChapter(recommended.scenesPerChapter);
+                      setWordsPerVolume(recommended.wordsPerVolume);
+                    }
+                  }}
+                  min={1}
+                  max={50}
+                  step={1}
+                  className="mt-2"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>1권</span>
+                  <span>10권</span>
+                  <span>20권</span>
+                  <span>30권</span>
+                  <span>50권</span>
+                </div>
+              </div>
+
+              {/* AI 자동 계산 토글 */}
+              <div className="flex items-center justify-between p-3 bg-background/50 rounded-lg">
+                <div>
+                  <span className="font-medium">🤖 AI 자동 구성</span>
+                  <p className="text-xs text-muted-foreground">장르에 맞는 최적 구성을 AI가 자동 계산</p>
+                </div>
+                <Button
+                  variant={autoCalculateMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setAutoCalculateMode(!autoCalculateMode);
+                    if (!autoCalculateMode) {
+                      const recommended = getAIRecommendedStructure(targetVolumeCount);
+                      setChaptersPerVolume(recommended.chaptersPerVolume);
+                      setScenesPerChapter(recommended.scenesPerChapter);
+                      setWordsPerVolume(recommended.wordsPerVolume);
+                    }
+                  }}
+                >
+                  {autoCalculateMode ? '자동' : '수동'}
+                </Button>
+              </div>
+
+              {/* 상세 구성 (수동 모드일 때만 조절 가능) */}
+              <div className={`grid grid-cols-3 gap-3 ${autoCalculateMode ? 'opacity-60' : ''}`}>
+                <div className="p-3 bg-background/50 rounded-lg text-center">
+                  <div className="text-xs text-muted-foreground mb-1">권당 챕터</div>
+                  <div className="text-lg font-bold">{chaptersPerVolume}장</div>
+                  {!autoCalculateMode && (
+                    <Slider
+                      value={[chaptersPerVolume]}
+                      onValueChange={([v]) => setChaptersPerVolume(v)}
+                      min={5}
+                      max={20}
+                      step={1}
+                      className="mt-2"
+                    />
+                  )}
+                </div>
+                <div className="p-3 bg-background/50 rounded-lg text-center">
+                  <div className="text-xs text-muted-foreground mb-1">챕터당 씬</div>
+                  <div className="text-lg font-bold">{scenesPerChapter}씬</div>
+                  {!autoCalculateMode && (
+                    <Slider
+                      value={[scenesPerChapter]}
+                      onValueChange={([v]) => setScenesPerChapter(v)}
+                      min={3}
+                      max={10}
+                      step={1}
+                      className="mt-2"
+                    />
+                  )}
+                </div>
+                <div className="p-3 bg-background/50 rounded-lg text-center">
+                  <div className="text-xs text-muted-foreground mb-1">권당 글자수</div>
+                  <div className="text-lg font-bold">{Math.floor(wordsPerVolume / 10000)}만자</div>
+                  {!autoCalculateMode && (
+                    <Slider
+                      value={[wordsPerVolume]}
+                      onValueChange={([v]) => setWordsPerVolume(v)}
+                      min={100000}
+                      max={300000}
+                      step={10000}
+                      className="mt-2"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* 계산 결과 요약 */}
+              <div className="grid grid-cols-4 gap-2 p-3 bg-background/80 rounded-lg">
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">총 챕터</div>
+                  <div className="font-bold text-primary">{calculatedChapterCount}장</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">총 씬</div>
+                  <div className="font-bold text-primary">{calculatedTotalScenes}씬</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">챕터당 글자</div>
+                  <div className="font-bold text-primary">{wordsPerChapter.toLocaleString()}자</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">씬당 글자</div>
+                  <div className="font-bold text-primary">{wordsPerScene.toLocaleString()}자</div>
+                </div>
+              </div>
+
+              {/* AI 권장 생성량 */}
+              <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <div className="text-sm font-medium text-yellow-700 dark:text-yellow-400 mb-2">
+                  🎯 AI 권장 생성량 ({targetVolumeCount}권 기준)
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">캐릭터:</span>
+                    <span className="font-bold">{getAIRecommendedStructure(targetVolumeCount).characters}명</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">세계관:</span>
+                    <span className="font-bold">{getAIRecommendedStructure(targetVolumeCount).worldSettings}개</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">플롯:</span>
+                    <span className="font-bold">{getAIRecommendedStructure(targetVolumeCount).plotPoints}개</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 에러 표시 */}

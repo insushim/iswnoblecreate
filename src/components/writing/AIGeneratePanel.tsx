@@ -29,13 +29,18 @@ import { useVolumeStore } from '@/stores/volumeStore';
 import { useWorldStore } from '@/stores/worldStore';
 import { usePlotStore } from '@/stores/plotStore';
 import { useCharacterStore } from '@/stores/characterStore';
-import { generateText } from '@/lib/gemini';
+import { generateText, generateTextStream } from '@/lib/gemini';
 import {
   generateVolumePrompt,
   generateScenePrompt,
   generateContinuePrompt,
   generateQuickPrompt,
 } from '@/lib/promptGenerator';
+import {
+  StreamGuard,
+  StreamGuardResult,
+  StreamViolation,
+} from '@/lib/streamGuard';
 import {
   analyzeFullStory,
   generateWritingContext,
@@ -44,6 +49,11 @@ import {
   detectTimeJump,
 } from '@/lib/storyAnalyzer';
 import { cleanGeneratedText } from '@/lib/gemini';
+import {
+  validateSceneContent,
+  SceneValidationResult,
+  formatValidationResult,
+} from '@/lib/sceneValidator';
 import { Chapter, Scene, Character, VolumeStructure, SceneStructure, WritingStyle } from '@/types';
 
 interface AIGeneratePanelProps {
@@ -141,12 +151,13 @@ export function AIGeneratePanel({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
 
-  // 생성 결과 검증 상태
-  const [validationResult, setValidationResult] = useState<{
-    isValid: boolean;
-    warnings: string[];
-    criticalErrors: string[];
-  } | null>(null);
+  // 생성 결과 검증 상태 (sceneValidator.ts 사용)
+  const [validationResult, setValidationResult] = useState<SceneValidationResult | null>(null);
+
+  // 스트리밍 생성 상태 (StreamGuard 실시간 차단)
+  const [streamingContent, setStreamingContent] = useState('');
+  const [streamGuardResult, setStreamGuardResult] = useState<StreamGuardResult | null>(null);
+  const [streamViolations, setStreamViolations] = useState<StreamViolation[]>([]);
 
   // 프로젝트의 권 목록 필터링
   const projectVolumes = useMemo(() =>
@@ -697,33 +708,125 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       // 전체 프롬프트 결합
       const fullPrompt = `${promptResult.systemPrompt}\n\n---\n\n${promptResult.userPrompt}`;
 
-      const response = await generateText(settings.geminiApiKey, fullPrompt, {
-        temperature: 0.8,
-        maxTokens: Math.min(32000, promptResult.metadata.targetWordCount * 2),
-        model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용 (구조화 생성은 창의적 작업)
-      });
+      let formattedContent = '';
 
-      // 텍스트 후처리
-      const formattedContent = formatNovelText(response);
-
-      // 씬 생성 시 검증 수행
+      // 🚨 씬 생성 시 StreamGuard를 사용한 실시간 차단 적용
       if (structuredMode === 'scene' && selectedScene) {
-        const validation = validateGeneratedSceneContent(formattedContent, {
-          startCondition: selectedScene.startCondition,
-          endCondition: selectedScene.endCondition,
+        console.log('[AIGeneratePanel] 🛡️ StreamGuard 실시간 차단 모드로 생성 시작');
+
+        // 🔒 전체 캐릭터 이름 목록 (미허용 캐릭터 감지용)
+        const allCharacterNames = charsToUse.map(c => c.name);
+        console.log('[AIGeneratePanel] 씬 허용 캐릭터:', selectedScene.participants);
+        console.log('[AIGeneratePanel] 전체 캐릭터 목록:', allCharacterNames);
+
+        // StreamGuard 초기화
+        const guard = new StreamGuard({
+          scene: selectedScene,
+          allCharacterNames, // 캐릭터 검증용
+          strictMode: true, // 위반 시 즉시 중단
+          onViolation: (violation) => {
+            console.warn('[StreamGuard] 위반 감지:', violation);
+            setStreamViolations(prev => [...prev, violation]);
+          },
+          onEndConditionMet: (content) => {
+            console.log('[StreamGuard] ✅ 종료 조건 도달! 생성 중단');
+          },
         });
+
+        // 스트리밍 상태 초기화
+        setStreamingContent('');
+        setStreamViolations([]);
+        setStreamGuardResult(null);
+
+        // 🔒🔒🔒 스트리밍 생성 시작 - 토큰 수를 매우 엄격하게 제한! 🔒🔒🔒
+        // 핵심: 분량보다 종료조건이 더 중요하므로, maxTokens를 낮게 설정!
+        // 18,000자 같은 높은 목표를 무시하고 5,000 토큰으로 강제 제한
+        // 이렇게 하면 AI가 미래 이야기를 쓸 공간이 없어짐
+        const MAX_TOKENS_HARD_LIMIT = 5000; // 절대 상한선
+        const maxTokensForScene = Math.min(MAX_TOKENS_HARD_LIMIT, Math.floor(promptResult.metadata.targetWordCount / 3));
+        console.log('[AIGeneratePanel] 🔒🔒🔒 maxTokens 강제 제한:', maxTokensForScene);
+        console.log('[AIGeneratePanel] 목표 글자수:', promptResult.metadata.targetWordCount, '→ 실제 토큰:', maxTokensForScene);
+        console.log('[AIGeneratePanel] ⚠️ 분량보다 종료조건 우선! 종료조건 도달 시 중단됨');
+
+        // 🔒 집필용 모델 사용! (planningModel이 아닌 writingModel)
+        const writingModelToUse = settings.writingModel || 'gemini-2.5-flash';
+        console.log('[AIGeneratePanel] 🎯 집필 모델:', writingModelToUse);
+
+        const stream = generateTextStream(settings.geminiApiKey, fullPrompt, {
+          temperature: 0.7, // 0.8 → 0.7로 낮춰서 더 예측 가능하게
+          maxTokens: maxTokensForScene,
+          model: writingModelToUse,
+        });
+
+        // 스트리밍 처리 + 실시간 차단
+        for await (const chunk of stream) {
+          const result = guard.processChunk(chunk);
+
+          // UI 업데이트 (실시간 표시)
+          setStreamingContent(prev => prev + result.processedChunk);
+
+          // 차단되면 즉시 중단
+          if (!result.shouldContinue) {
+            console.log('[AIGeneratePanel] 🛑 StreamGuard에 의해 생성 중단됨');
+            break;
+          }
+        }
+
+        // 최종 결과 가져오기
+        const guardResult = guard.getResult();
+        setStreamGuardResult(guardResult);
+
+        console.log('[AIGeneratePanel] StreamGuard 결과:', {
+          wasTerminated: guardResult.wasTerminated,
+          terminationReason: guardResult.terminationReason,
+          endConditionReached: guardResult.endConditionReached,
+          violationsCount: guardResult.violations.length,
+          contentLength: guardResult.content.length,
+        });
+
+        // 텍스트 후처리
+        formattedContent = formatNovelText(guardResult.content);
+
+        // 추가 검증 (sceneValidator 사용)
+        const validation = validateSceneContent(formattedContent, selectedScene);
         setValidationResult(validation);
 
-        // 심각한 오류 시 경고 표시 (하지만 내용은 보여줌)
-        if (!validation.isValid) {
-          console.warn('[AIGeneratePanel] 생성 내용 검증 실패:', validation.criticalErrors);
-          setError(`⚠️ 경고: ${validation.criticalErrors.slice(0, 2).join(', ')}\n이 내용을 적용하면 씬 범위를 벗어날 수 있습니다.`);
+        console.log('[AIGeneratePanel] 최종 검증 결과:', formatValidationResult(validation));
+
+        // 결과 요약 메시지
+        if (guardResult.wasTerminated && guardResult.endConditionReached) {
+          // 정상 종료 - 종료 조건 도달
+          setError(''); // 에러 없음
+        } else if (guardResult.wasTerminated && !guardResult.endConditionReached) {
+          // 위반으로 인한 강제 중단
+          setError(`⚠️ 생성 중단: ${guardResult.terminationReason}\n위반 ${guardResult.violations.length}건 감지됨`);
+        } else if (!validation.isValid) {
+          // 후처리 검증 실패
+          const criticalViolations = validation.violations
+            .filter(v => v.severity === 'critical')
+            .map(v => v.description);
+          setError([
+            `⚠️ 씬 설정 위반 감지! (점수: ${validation.score}/100)`,
+            ...criticalViolations.slice(0, 3),
+          ].join('\n'));
         }
+
       } else {
+        // 권 전체/이어쓰기는 기존 방식 사용 - 집필용 모델 사용!
+        const writingModelForVolume = settings.writingModel || 'gemini-2.5-flash';
+        console.log('[AIGeneratePanel] 🎯 권 집필 모델:', writingModelForVolume);
+
+        const response = await generateText(settings.geminiApiKey, fullPrompt, {
+          temperature: 0.7,
+          maxTokens: Math.min(16000, promptResult.metadata.targetWordCount),
+          model: writingModelForVolume,
+        });
+        formattedContent = formatNovelText(response);
         setValidationResult(null);
       }
 
       setGeneratedContent(formattedContent);
+      setStreamingContent(''); // 스트리밍 표시 초기화
 
       // 글자수 업데이트
       if (selectedScene && structuredMode !== 'volume') {
@@ -817,45 +920,8 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
     return result.trim();
   };
 
-  // 생성된 내용 검증 함수 (스토리 압축, 시간 점프 감지)
-  const validateGeneratedSceneContent = (
-    content: string,
-    sceneConfig?: { startCondition?: string; endCondition?: string }
-  ): {
-    isValid: boolean;
-    warnings: string[];
-    criticalErrors: string[];
-  } => {
-    const warnings: string[] = [];
-    const criticalErrors: string[] = [];
-
-    // 1. 스토리 압축 감지
-    const compressionResult = detectStoryCompression(content, sceneConfig);
-    if (compressionResult.isCompressed) {
-      criticalErrors.push(`스토리 압축 감지 (점수: ${compressionResult.compressionScore})`);
-      for (const v of compressionResult.violations) {
-        if (v.severity === 'critical') {
-          criticalErrors.push(`- ${v.description}`);
-        } else {
-          warnings.push(`- ${v.description}`);
-        }
-      }
-    }
-
-    // 2. 시간 점프 감지
-    const timeJumpResult = detectTimeJump(content);
-    if (timeJumpResult.hasTimeJump) {
-      for (const v of timeJumpResult.violations) {
-        warnings.push(`시간 점프: "${v.expression}" - ${v.suggestion}`);
-      }
-    }
-
-    return {
-      isValid: criticalErrors.length === 0,
-      warnings,
-      criticalErrors,
-    };
-  };
+  // 기존 validateGeneratedSceneContent는 sceneValidator.ts의 validateSceneContent로 대체됨
+  // 더 강력한 씬 설정 강제 검증 (시작/종료 조건, mustInclude, 범위, 시간점프 등)
 
   const toggleCharacter = (characterId: string) => {
     setSelectedCharacters((prev) =>
@@ -1331,6 +1397,27 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
                         <div><strong>장소:</strong> {selectedScene.location || '미정'}</div>
                         <div><strong>시간:</strong> {selectedScene.timeframe || '미정'}</div>
                         <div><strong>목표:</strong> {selectedScene.targetWordCount.toLocaleString()}자</div>
+
+                        {/* 🔒 등장인물 표시 (핵심!) */}
+                        <div className={`p-2 rounded border ${
+                          selectedScene.participants && selectedScene.participants.length > 0
+                            ? 'bg-blue-500/10 border-blue-500/20'
+                            : 'bg-red-500/10 border-red-500/20'
+                        }`}>
+                          <strong className={
+                            selectedScene.participants && selectedScene.participants.length > 0
+                              ? 'text-blue-700 dark:text-blue-400'
+                              : 'text-red-700 dark:text-red-400'
+                          }>
+                            👥 등장인물:
+                          </strong>
+                          {selectedScene.participants && selectedScene.participants.length > 0 ? (
+                            <span className="ml-1">{selectedScene.participants.join(', ')}</span>
+                          ) : (
+                            <span className="ml-1 text-red-600">⚠️ 미설정 (씬 편집에서 설정 필요!)</span>
+                          )}
+                        </div>
+
                         <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded text-amber-700 dark:text-amber-400">
                           <strong>종료 조건:</strong> {selectedScene.endCondition || '(미설정)'}
                         </div>
@@ -1482,21 +1569,39 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
 
                   {error && <p className="text-sm text-destructive whitespace-pre-line">{error}</p>}
 
-                  {/* 검증 결과 표시 */}
+                  {/* 검증 결과 표시 - 강화된 씬 설정 검증 */}
                   {validationResult && !validationResult.isValid && (
                     <Alert variant="destructive">
                       <AlertTriangle className="h-4 w-4" />
-                      <AlertTitle>스토리 압축/시간 점프 감지!</AlertTitle>
+                      <AlertTitle>⛔ 씬 설정 위반 감지! (점수: {validationResult.score}/100)</AlertTitle>
                       <AlertDescription>
                         <ul className="list-disc list-inside text-xs mt-1 space-y-1">
-                          {validationResult.criticalErrors.slice(0, 5).map((err, i) => (
-                            <li key={i} className="text-red-600">{err}</li>
+                          {validationResult.violations.slice(0, 5).map((violation, i) => (
+                            <li key={i} className={
+                              violation.severity === 'critical' ? 'text-red-600 font-bold' :
+                              violation.severity === 'major' ? 'text-orange-600' : 'text-yellow-600'
+                            }>
+                              [{violation.severity}] {violation.description}
+                            </li>
                           ))}
                         </ul>
-                        <p className="mt-2 text-xs">
-                          💡 이 씬은 기획에서 정의한 범위를 벗어났습니다.
-                          <br />씬 설정의 시작/종료 조건을 확인하고 다시 생성해주세요.
-                        </p>
+                        {validationResult.suggestions.length > 0 && (
+                          <div className="mt-2 text-xs">
+                            <p className="font-semibold">💡 제안:</p>
+                            <ul className="list-disc list-inside">
+                              {validationResult.suggestions.slice(0, 2).map((s, i) => (
+                                <li key={i}>{s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-xs">
+                          <p>📋 세부 검증:</p>
+                          <p>- 시작 조건: {validationResult.startConditionCheck.passed ? '✓' : '✗'}</p>
+                          <p>- 종료 조건: {validationResult.endConditionCheck.passed ? '✓' : '✗'} (유사도: {((validationResult.endConditionCheck.similarity || 0) * 100).toFixed(0)}%)</p>
+                          <p>- 필수 내용: {validationResult.mustIncludeCheck.foundItems}/{validationResult.mustIncludeCheck.totalItems} 포함</p>
+                          <p>- 시간 점프: {validationResult.timeJumpCheck.passed ? '✓' : `✗ (${validationResult.timeJumpCheck.jumpCount}개)`}</p>
+                        </div>
                       </AlertDescription>
                     </Alert>
                   )}
@@ -1504,32 +1609,105 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
                   {validationResult && validationResult.warnings.length > 0 && validationResult.isValid && (
                     <Alert>
                       <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      <AlertTitle className="text-yellow-700">경고</AlertTitle>
+                      <AlertTitle className="text-yellow-700">경고 ({validationResult.warnings.length}개)</AlertTitle>
                       <AlertDescription>
                         <ul className="list-disc list-inside text-xs mt-1">
                           {validationResult.warnings.slice(0, 3).map((warn, i) => (
-                            <li key={i}>{warn}</li>
+                            <li key={i}>{warn.description}</li>
                           ))}
                         </ul>
                       </AlertDescription>
                     </Alert>
                   )}
 
+                  {/* 🔴 실시간 스트리밍 표시 (생성 중) */}
+                  {isGenerating && streamingContent && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <span className="animate-pulse">🔴</span> 실시간 생성 중...
+                          <span className="text-xs text-muted-foreground">
+                            ({streamingContent.length.toLocaleString()}자)
+                          </span>
+                        </Label>
+                        {streamViolations.length > 0 && (
+                          <Badge variant="destructive">
+                            ⚠ 위반 {streamViolations.length}건 감지
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="p-4 rounded-lg border bg-muted/50 max-h-60 overflow-y-auto">
+                        <p className="text-sm whitespace-pre-wrap">{streamingContent}</p>
+                      </div>
+                      {streamViolations.length > 0 && (
+                        <Alert variant="destructive">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertTitle>실시간 위반 감지</AlertTitle>
+                          <AlertDescription>
+                            <ul className="text-xs mt-1 space-y-1">
+                              {streamViolations.slice(-3).map((v, i) => (
+                                <li key={i}>
+                                  [{v.type}] {v.description}
+                                  {v.detectedText && (
+                                    <span className="text-muted-foreground"> - &quot;{v.detectedText.slice(0, 30)}...&quot;</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  )}
+
+                  {/* StreamGuard 결과 표시 */}
+                  {streamGuardResult && streamGuardResult.wasTerminated && (
+                    <Alert variant={streamGuardResult.endConditionReached ? 'default' : 'destructive'}>
+                      {streamGuardResult.endConditionReached ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4" />
+                      )}
+                      <AlertTitle>
+                        {streamGuardResult.endConditionReached
+                          ? '✅ 종료 조건 도달 - 정상 중단'
+                          : `⚠️ 강제 중단: ${streamGuardResult.terminationReason}`}
+                      </AlertTitle>
+                      <AlertDescription className="text-xs">
+                        생성된 글자수: {streamGuardResult.content.length.toLocaleString()}자
+                        {streamGuardResult.violations.length > 0 && (
+                          <span> | 위반 {streamGuardResult.violations.length}건</span>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* 생성된 내용 */}
-                  {generatedContent && (
+                  {generatedContent && !isGenerating && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label>생성된 내용</Label>
-                        {validationResult && (
-                          <Badge variant={validationResult.isValid ? 'default' : 'destructive'}>
-                            {validationResult.isValid ? '✓ 검증 통과' : '⚠ 검증 실패'}
-                          </Badge>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {streamGuardResult?.endConditionReached && (
+                            <Badge variant="outline" className="text-green-600">
+                              ✓ 종료조건 도달
+                            </Badge>
+                          )}
+                          {validationResult && (
+                            <Badge variant={validationResult.isValid ? 'default' : 'destructive'}>
+                              {validationResult.isValid
+                                ? `✓ 검증 통과 (${validationResult.score}/100)`
+                                : `⚠ 검증 실패 (${validationResult.score}/100)`}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       <div className={`p-4 rounded-lg border max-h-60 overflow-y-auto ${
                         validationResult && !validationResult.isValid
                           ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
-                          : 'bg-muted/50'
+                          : streamGuardResult?.endConditionReached
+                            ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800'
+                            : 'bg-muted/50'
                       }`}>
                         <p className="text-sm whitespace-pre-wrap">{generatedContent}</p>
                       </div>

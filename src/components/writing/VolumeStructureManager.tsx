@@ -238,6 +238,7 @@ JSON 형식:
         "povType": "third-limited",
         "location": "장소",
         "timeframe": "시간대",
+        "participants": ["이 씬에 등장하는 캐릭터1", "캐릭터2"],
         "startCondition": "씬 시작 상황",
         "mustInclude": ["필수 포함 내용1", "필수 포함 내용2"],
         "endCondition": "씬 종료 조건 (구체적 대사/행동)",
@@ -267,6 +268,7 @@ povType: first(1인칭), third-limited(3인칭 제한), omniscient(전지적)`;
           povType: 'first' | 'third-limited' | 'omniscient';
           location: string;
           timeframe: string;
+          participants: string[]; // 🔒 등장인물 필수!
           startCondition: string;
           mustInclude: string[];
           endCondition: string;
@@ -326,6 +328,7 @@ povType: first(1인칭), third-limited(3인칭 제한), omniscient(전지적)`;
               povType: scene.povType || 'third-limited',
               location: cleanLocation,
               timeframe: scene.timeframe || '',
+              participants: scene.participants || [], // 🔒 등장인물 필수 전달!
               startCondition: scene.startCondition || '',
               mustInclude: scene.mustInclude || [],
               endCondition: scene.endCondition || '',
@@ -448,6 +451,7 @@ endPointType/endConditionType: dialogue(대사), action(행동), narration(서�
           povType: 'first' | 'third-limited' | 'omniscient';
           location: string;
           timeframe: string;
+          participants: string[]; // 🔒 등장인물 필수!
           startCondition: string;
           mustInclude: string[];
           endCondition: string;
@@ -499,6 +503,7 @@ endPointType/endConditionType: dialogue(대사), action(행동), narration(서�
             povType: scene.povType || 'third-limited',
             location: cleanLocation,
             timeframe: scene.timeframe || '',
+            participants: scene.participants || [], // 🔒 등장인물 필수 전달!
             startCondition: scene.startCondition || '',
             mustInclude: scene.mustInclude || [],
             endCondition: scene.endCondition || '',
@@ -1267,15 +1272,18 @@ function EditSceneDialog({
 }) {
   const [formData, setFormData] = useState(scene);
   const [mustIncludeText, setMustIncludeText] = useState(scene.mustInclude.join('\n'));
+  const [participantsText, setParticipantsText] = useState((scene.participants || []).join('\n'));
 
   useEffect(() => {
     setFormData(scene);
     setMustIncludeText(scene.mustInclude.join('\n'));
+    setParticipantsText((scene.participants || []).join('\n'));
   }, [scene]);
 
   const handleSave = () => {
     onSave({
       ...formData,
+      participants: participantsText.split('\n').filter(Boolean), // 🔒 등장인물 저장!
       mustInclude: mustIncludeText.split('\n').filter(Boolean),
     });
     onOpenChange(false);
@@ -1351,6 +1359,23 @@ function EditSceneDialog({
                 onChange={(e) => setFormData({ ...formData, timeframe: e.target.value })}
               />
             </div>
+          </div>
+
+          {/* 🔒 등장인물 입력 필드 (핵심!) */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <Label className="text-blue-700 dark:text-blue-400 font-semibold">
+              👥 등장인물 (한 줄에 하나씩) - 필수!
+            </Label>
+            <Textarea
+              value={participantsText}
+              onChange={(e) => setParticipantsText(e.target.value)}
+              placeholder="이 씬에 등장하는 캐릭터만 입력&#10;황진&#10;춘섬&#10;(언급만 되는 캐릭터는 제외!)"
+              rows={3}
+              className="mt-2"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              ⚠️ 여기 입력한 캐릭터만 이 씬에서 등장할 수 있습니다!
+            </p>
           </div>
 
           <div>

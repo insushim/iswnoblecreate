@@ -132,8 +132,8 @@ export async function initializeAppSettings(): Promise<AppSettings> {
       soundEffects: false,
       notifications: true,
       geminiApiKey: envApiKey,
-      planningModel: 'gemini-3-flash-preview',  // 기획용: 고품질 모델
-      writingModel: 'gemini-2.0-flash', // 집필용: 무료 모델
+      planningModel: 'gemini-3-flash-preview',  // 기획용: 빠르고 저렴한 모델
+      writingModel: 'gemini-2.5-flash', // 집필용: 품질 좋은 모델
     };
 
     await db.appSettings.add(defaultSettings);

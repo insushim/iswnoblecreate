@@ -597,14 +597,16 @@ export interface WritingSession {
   notes?: string;
 }
 
-// Gemini 모델 타입 (Pro 모델 추가 - 긴 소설 작성에 적합)
+// Gemini 모델 타입 (2025년 12월 최신)
 export type GeminiModel =
-  | 'gemini-2.0-flash'      // 무료 기본 모델
-  | 'gemini-2.5-flash'      // 유료 고성능
-  | 'gemini-2.5-pro'        // 유료 최고 품질 (긴 컨텍스트, 복잡한 소설에 추천)
-  | 'gemini-1.5-pro'        // 유료 안정적 Pro 모델
-  | 'gemini-1.5-flash'      // 유료 경량
-  | 'gemini-3-flash-preview'; // 최신 프리뷰
+  | 'gemini-3-pro-preview'    // 🔥 최신 최고 품질 (Gemini 3 Pro)
+  | 'gemini-3-flash-preview'  // 🔥 최신 고속 모델 (Gemini 3 Flash)
+  | 'gemini-2.5-pro'          // 안정적 Pro (긴 컨텍스트, 복잡한 소설에 추천)
+  | 'gemini-2.5-flash'        // 고성능 Flash
+  | 'gemini-2.5-flash-lite'   // 저비용 고속 모델
+  | 'gemini-2.0-flash'        // 무료 기본 모델
+  | 'gemini-1.5-pro'          // 레거시 Pro
+  | 'gemini-1.5-flash';       // 레거시 Flash
 
 // 앱 설정
 export interface AppSettings {
