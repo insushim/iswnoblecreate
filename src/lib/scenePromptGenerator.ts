@@ -63,163 +63,241 @@ export interface ScenePromptData {
   version: number;
 }
 
-// 황진 소설 1권 씬 분할표 예시 데이터
+// 황진 소설 1권 씬 분할표 예시 데이터 (v3.0 강화)
 export interface Volume1SceneTemplate {
   sceneNumber: number;
   title: string;
   targetWordCount: number;
+  sceneType: 'mini' | 'normal' | 'important' | 'climax'; // v3.0: 씬 유형
   pov: string;
   povType: 'first' | 'third-limited' | 'omniscient';
   location: string;
   timeframe: string;
   participants: string[];
   mustInclude: string[];
+  forbiddenInThisScene: string[]; // v3.0: 이 씬에서 금지된 키워드
   startCondition: string;
   startConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
   endCondition: string;
   endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
   emotionalGoal: string;
   plotFunction: string;
+  connectionToPrevious?: string; // v3.0: 이전 씬 연결
+  connectionToNext?: string; // v3.0: 다음 씬 연결
 }
 
 // ============================================
-// 황진 장군 1권 씬 분할표 (50씬 - 20만자 기준, 평균 4000자/씬)
-// 기존 12씬을 50씬으로 세분화
+// 황진 장군 1권 씬 분할표 (v3.0: 100씬 - 20만자 기준, 평균 2000자/씬)
+// 더 잘게 쪼개어 AI가 범위를 벗어날 확률 최소화
 // ============================================
 
 export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
-  // ========== 현대 파트 (씬 1-6) ==========
+  // ========== 현대 파트 (씬 1-10) ==========
   {
     sceneNumber: 1,
-    title: "강의 시작",
-    targetWordCount: 3000,
+    title: "강의 준비",
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우",
     povType: "third-limited",
-    location: "서울 강남구 유튜브 스튜디오",
-    timeframe: "2025년 3월, 오후 3시",
-    participants: ["강민우", "스튜디오 스태프"],
+    location: "서울 강남구 유튜브 스튜디오 대기실",
+    timeframe: "2025년 3월 15일, 오후 2시 50분",
+    participants: ["강민우"],
     mustInclude: [
-      "강민우가 카메라 앞에 서서 '다음 문제!'라고 외치는 장면",
-      "레이저 포인터로 스크린을 가리키며 황진 장군 문제 출제",
-      "수백만 구독자를 가진 스타 강사로서의 자신감"
+      "강민우가 거울을 보며 넥타이를 매만지는 장면",
+      "강민우의 독백: '오늘도 100만뷰 찍어야지'",
+      "스마트폰으로 구독자 수 확인하는 장면"
     ],
-    startCondition: "강민우가 '자, 집중하세요! 다음 문제 갑니다!'라고 말하며 레이저 포인터를 든다",
-    startConditionType: "dialogue",
-    endCondition: "강민우가 '정답은 3번입니다. 황진 장군은 여자가 아닙니다'라고 말한다",
-    endConditionType: "dialogue",
+    forbiddenInThisScene: ["스튜디오 촬영", "황진 장군 언급", "빙의", "두통"],
+    startCondition: "강민우가 대기실 거울 앞에서 넥타이를 고쳐 맨다",
+    startConditionType: "action",
+    endCondition: "강민우가 '좋아, 가자'라고 혼잣말하며 대기실 문손잡이를 잡는다",
+    endConditionType: "action",
     emotionalGoal: "자신감",
-    plotFunction: "주인공 현대 정체성 확립"
+    plotFunction: "주인공 현대 일상 소개",
+    connectionToNext: "문을 열고 스튜디오로 입장"
   },
   {
     sceneNumber: 2,
-    title: "황진 설명",
-    targetWordCount: 4000,
+    title: "스튜디오 입장",
+    targetWordCount: 1200,
+    sceneType: "mini",
     pov: "강민우",
     povType: "third-limited",
     location: "서울 강남구 유튜브 스튜디오",
-    timeframe: "2025년 3월, 오후 3시 10분",
+    timeframe: "2025년 3월 15일, 오후 2시 55분",
+    participants: ["강민우", "PD 김"],
+    mustInclude: [
+      "스튜디오 조명이 켜지는 장면",
+      "PD가 '5분 뒤 시작합니다'라고 말하는 장면",
+      "강민우가 의자에 앉으며 마이크 테스트하는 장면"
+    ],
+    forbiddenInThisScene: ["강의 시작", "황진 장군 문제", "두통", "빙의"],
+    startCondition: "강민우가 스튜디오 문을 열고 들어선다",
+    startConditionType: "action",
+    endCondition: "PD 김이 '준비되셨으면 시작하겠습니다'라고 말하고, 강민우가 고개를 끄덕인다",
+    endConditionType: "dialogue",
+    emotionalGoal: "집중",
+    plotFunction: "강의 시작 직전 분위기 조성",
+    connectionToPrevious: "대기실에서 나옴",
+    connectionToNext: "강의 시작"
+  },
+  {
+    sceneNumber: 3,
+    title: "강의 시작",
+    targetWordCount: 2000,
+    sceneType: "normal",
+    pov: "강민우",
+    povType: "third-limited",
+    location: "서울 강남구 유튜브 스튜디오",
+    timeframe: "2025년 3월 15일, 오후 3시",
+    participants: ["강민우"],
+    mustInclude: [
+      "강민우가 카메라를 향해 '안녕하세요, 역사 덕후 강민우입니다!'라고 인사",
+      "레이저 포인터로 스크린을 가리키며 문제 출제",
+      "시청자들의 댓글을 읽는 척하는 장면"
+    ],
+    forbiddenInThisScene: ["황진 장군 정답 공개", "강의 마무리", "두통", "빙의"],
+    startCondition: "PD가 손가락으로 카운트다운을 하고, 빨간 녹화 불이 켜진다",
+    startConditionType: "action",
+    endCondition: "강민우가 '자, 다음 문제 갑니다! 황진 장군에 대한 문제입니다!'라고 말한다",
+    endConditionType: "dialogue",
+    emotionalGoal: "열정",
+    plotFunction: "스타 강사로서의 모습 확립",
+    connectionToPrevious: "녹화 준비 완료",
+    connectionToNext: "황진 장군 문제 출제"
+  },
+  {
+    sceneNumber: 4,
+    title: "황진 설명",
+    targetWordCount: 2500,
+    sceneType: "important",
+    pov: "강민우",
+    povType: "third-limited",
+    location: "서울 강남구 유튜브 스튜디오",
+    timeframe: "2025년 3월 15일, 오후 3시 10분",
     participants: ["강민우"],
     mustInclude: [
       "황진 장군이 역사에서 왜 덜 알려졌는지 설명",
       "사대부들의 질투로 기록이 미비함을 설명",
       "열정적으로 손짓하며 강의하는 모습"
     ],
+    forbiddenInThisScene: ["강의 마무리", "두통", "빙의", "조선시대"],
     startCondition: "강민우가 '여러분, 황진 장군이 왜 이순신만큼 유명하지 않은지 아시나요?'라고 묻는다",
     startConditionType: "dialogue",
     endCondition: "강민우가 '사대부들의 질투입니다!'라고 외치며 책상을 탁 친다",
     endConditionType: "dialogue",
     emotionalGoal: "열정",
-    plotFunction: "황진 장군 지식 전달"
+    plotFunction: "황진 장군 지식 전달",
+    connectionToPrevious: "황진 장군 문제 출제",
+    connectionToNext: "강의 마무리"
   },
   {
-    sceneNumber: 3,
+    sceneNumber: 5,
     title: "강의 마무리",
-    targetWordCount: 2500,
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우",
     povType: "third-limited",
     location: "서울 강남구 유튜브 스튜디오",
-    timeframe: "2025년 3월, 오후 4시 50분",
+    timeframe: "2025년 3월 15일, 오후 4시 50분",
     participants: ["강민우"],
     mustInclude: [
       "강의 마무리 멘트",
       "다음 시간 예고 (황진 장군의 비밀)",
       "카메라를 향해 손 흔들기"
     ],
+    forbiddenInThisScene: ["두통", "빙의", "쓰러짐", "1590년"],
     startCondition: "강민우가 '자, 오늘 강의는 여기까지입니다'라고 말한다",
     startConditionType: "dialogue",
     endCondition: "강민우가 '구독과 좋아요 잊지 마세요!'라고 말하며 카메라를 향해 손을 흔든다",
     endConditionType: "dialogue",
     emotionalGoal: "만족감",
-    plotFunction: "현대 파트 마무리"
+    plotFunction: "현대 파트 마무리",
+    connectionToPrevious: "황진 설명 완료",
+    connectionToNext: "휴식 시작"
   },
   {
-    sceneNumber: 4,
+    sceneNumber: 6,
     title: "휴식",
-    targetWordCount: 2000,
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우",
     povType: "third-limited",
     location: "유튜브 스튜디오 대기실",
-    timeframe: "2025년 3월, 오후 5시",
+    timeframe: "2025년 3월 15일, 오후 5시",
     participants: ["강민우"],
     mustInclude: [
       "강의 후 피로감을 느끼며 의자에 앉는 장면",
       "물을 마시며 한숨 돌리는 모습",
       "혼잣말로 오늘 강의 평가"
     ],
+    forbiddenInThisScene: ["두통", "빙의", "1590년", "황진 장군"],
     startCondition: "강민우가 대기실 의자에 털썩 앉으며 '휴...'라고 한숨을 쉰다",
     startConditionType: "action",
     endCondition: "강민우가 물컵을 내려놓으며 '오늘도 잘했어'라고 혼잣말한다",
     endConditionType: "dialogue",
     emotionalGoal: "피로",
-    plotFunction: "빙의 전 일상"
+    plotFunction: "빙의 전 일상",
+    connectionToPrevious: "강의 종료 후 대기실로 이동",
+    connectionToNext: "두통 시작"
   },
   {
-    sceneNumber: 5,
+    sceneNumber: 7,
     title: "두통",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "important",
     pov: "강민우",
     povType: "third-limited",
     location: "유튜브 스튜디오 대기실",
-    timeframe: "2025년 3월, 오후 5시 5분",
+    timeframe: "2025년 3월 15일, 오후 5시 5분",
     participants: ["강민우", "스태프"],
     mustInclude: [
       "갑자기 시작되는 강렬한 두통",
       "관자놀이를 움켜쥐며 고통스러워하는 모습",
       "눈앞이 번쩍이는 섬광"
     ],
+    forbiddenInThisScene: ["쓰러짐", "1590년", "조선시대", "김여물"],
     startCondition: "강민우가 갑자기 '으...'라며 관자놀이를 움켜쥔다",
     startConditionType: "action",
     endCondition: "강민우가 '뭐지... 이 빛은...?'이라고 중얼거린다",
     endConditionType: "dialogue",
     emotionalGoal: "공포",
-    plotFunction: "빙의 시작"
+    plotFunction: "빙의 시작",
+    connectionToPrevious: "휴식 중 갑작스러운 이상 증세",
+    connectionToNext: "쓰러짐"
   },
   {
-    sceneNumber: 6,
+    sceneNumber: 8,
     title: "쓰러짐",
-    targetWordCount: 2500,
+    targetWordCount: 2000,
+    sceneType: "climax",
     pov: "강민우",
     povType: "third-limited",
     location: "유튜브 스튜디오 대기실",
-    timeframe: "2025년 3월, 오후 5시 7분",
+    timeframe: "2025년 3월 15일, 오후 5시 7분",
     participants: ["강민우", "스태프들"],
     mustInclude: [
       "온몸에 전기가 흐르는 듯한 통증",
       "바닥에 쓰러지는 장면",
       "스태프들의 다급한 외침"
     ],
+    forbiddenInThisScene: ["1590년", "조선시대", "김여물", "황진의 거처"],
     startCondition: "강민우가 '으아악!'이라는 비명과 함께 의자에서 떨어진다",
     startConditionType: "action",
     endCondition: "시야가 완전히 어둠에 잠기며 의식을 잃는다",
     endConditionType: "narration",
     emotionalGoal: "혼란",
-    plotFunction: "현대-과거 전환점"
+    plotFunction: "현대-과거 전환점",
+    connectionToPrevious: "두통 악화",
+    connectionToNext: "과거로 빙의"
   },
-  // ========== 과거 빙의 직후 파트 (씬 7-12) ==========
+  // ========== 과거 빙의 직후 파트 (씬 9-14) ==========
   {
-    sceneNumber: 7,
+    sceneNumber: 9,
     title: "낯선 천장",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "important",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 (한옥방)",
@@ -230,17 +308,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "온몸이 뻐근하고 쑤시는 느낌",
       "자신의 손을 보며 당혹감"
     ],
+    forbiddenInThisScene: ["김여물", "시대 확인", "황진 이름", "현대"],
     startCondition: "어둠 속에서 의식이 돌아오고, 낯선 나무 천장이 시야에 들어온다",
     startConditionType: "narration",
     endCondition: "강민우가 '여기가... 어디지?'라고 중얼거린다",
     endConditionType: "dialogue",
     emotionalGoal: "혼란",
-    plotFunction: "빙의 인식"
+    plotFunction: "빙의 인식",
+    connectionToPrevious: "현대에서 쓰러진 후 과거에서 눈을 뜸",
+    connectionToNext: "김여물 등장"
   },
   {
-    sceneNumber: 8,
+    sceneNumber: 10,
     title: "김여물 등장",
-    targetWordCount: 3500,
+    targetWordCount: 2000,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 (한옥방)",
@@ -251,17 +333,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "낯선 복장의 남자를 보고 놀라는 강민우",
       "김여물에게 '여기가 어디지?'라고 묻는 장면"
     ],
+    forbiddenInThisScene: ["1590년", "임진왜란", "황진 장군", "거울"],
     startCondition: "방문이 열리며 한복 차림의 남자가 들어온다",
     startConditionType: "action",
     endCondition: "김여물이 '남원입니다, 도련님'이라고 대답한다",
     endConditionType: "dialogue",
     emotionalGoal: "당혹",
-    plotFunction: "시대 확인 시작"
+    plotFunction: "시대 확인 시작",
+    connectionToPrevious: "낯선 환경에서 혼란스러운 상태",
+    connectionToNext: "시대 확인"
   },
   {
-    sceneNumber: 9,
+    sceneNumber: 11,
     title: "시대 확인",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "important",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 (한옥방)",
@@ -272,17 +358,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "'가경 23년입니다'라는 대답",
       "1590년임을 깨닫고 얼굴이 창백해지는 장면"
     ],
+    forbiddenInThisScene: ["거울", "황진 이름 확인", "신체 능력", "무술"],
     startCondition: "강민우가 '지금이 몇 년도야?'라고 다급하게 묻는다",
     startConditionType: "dialogue",
     endCondition: "강민우가 '1590년... 임진왜란 2년 전...'이라고 중얼거린다",
     endConditionType: "dialogue",
     emotionalGoal: "충격",
-    plotFunction: "시대 배경 확정"
+    plotFunction: "시대 배경 확정",
+    connectionToPrevious: "김여물과의 대화",
+    connectionToNext: "거울 확인"
   },
   {
-    sceneNumber: 10,
+    sceneNumber: 12,
     title: "거울 속 얼굴",
-    targetWordCount: 3000,
+    targetWordCount: 1800,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 (한옥방)",
@@ -293,17 +383,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "거울을 만지며 현실임을 확인",
       "뺨을 꼬집어보는 장면"
     ],
+    forbiddenInThisScene: ["황진 이름", "임진왜란", "절망", "운명"],
     startCondition: "강민우가 방 구석의 동경을 발견하고 다가간다",
     startConditionType: "action",
     endCondition: "강민우가 '진짜... 꿈이 아니야...'라고 한숨을 쉰다",
     endConditionType: "dialogue",
     emotionalGoal: "수용",
-    plotFunction: "빙의 확정"
+    plotFunction: "빙의 확정",
+    connectionToPrevious: "시대 확인 후 현실 직시",
+    connectionToNext: "정체성 확인"
   },
   {
-    sceneNumber: 11,
+    sceneNumber: 13,
     title: "황진이라는 이름",
-    targetWordCount: 4000,
+    targetWordCount: 2500,
+    sceneType: "climax",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 (한옥방)",
@@ -314,17 +408,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "'황진 도련님이십니다'라는 대답",
       "역사 지식으로 황진을 떠올리는 내적 독백"
     ],
+    forbiddenInThisScene: ["절망", "운명 탄식", "마당", "신체 능력"],
     startCondition: "강민우가 김여물에게 '나는... 누구지?'라고 묻는다",
     startConditionType: "dialogue",
     endCondition: "강민우가 '황진... 그 황진 장군?!'이라고 소리친다",
     endConditionType: "dialogue",
     emotionalGoal: "경악",
-    plotFunction: "정체성 확립"
+    plotFunction: "정체성 확립",
+    connectionToPrevious: "거울로 외모 확인 후 이름 질문",
+    connectionToNext: "절망"
   },
   {
-    sceneNumber: 12,
+    sceneNumber: 14,
     title: "절망",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "important",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 (한옥방)",
@@ -335,19 +433,23 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "창밖을 바라보며 탄식하는 모습",
       "임진왜란까지 2년밖에 없음을 상기"
     ],
+    forbiddenInThisScene: ["마당", "신체 능력", "물동이", "무술"],
     startCondition: "강민우가 창가로 걸어가며 머리를 감싼다",
     startConditionType: "action",
     endCondition: "강민우가 '젠장... 하필 왜 황진이야...'라고 탄식한다",
     endConditionType: "dialogue",
     emotionalGoal: "절망",
-    plotFunction: "동기 부여 시작"
+    plotFunction: "동기 부여 시작",
+    connectionToPrevious: "황진이라는 이름을 알고 충격",
+    connectionToNext: "마당으로 나감"
   },
 
-  // ========== 신체 능력 발견 파트 (씬 13-18) ==========
+  // ========== 신체 능력 발견 파트 (씬 15-20) ==========
   {
-    sceneNumber: 13,
+    sceneNumber: 15,
     title: "마당으로",
-    targetWordCount: 2500,
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 마당",
@@ -358,17 +460,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "조선시대 마당 풍경 묘사",
       "몸을 움직여보려는 의도"
     ],
+    forbiddenInThisScene: ["물동이 들기", "뒷산", "호랑이"],
     startCondition: "강민우가 '일단 이 몸을 확인해봐야겠어'라고 생각하며 일어선다",
     startConditionType: "narration",
     endCondition: "강민우가 마당 한가운데에 서서 팔을 뻗어본다",
     endConditionType: "action",
     emotionalGoal: "호기심",
-    plotFunction: "신체 테스트 시작"
+    plotFunction: "신체 테스트 시작",
+    connectionToPrevious: "절망 후 몸 확인 결심",
+    connectionToNext: "물동이 테스트"
   },
   {
-    sceneNumber: 14,
+    sceneNumber: 16,
     title: "물동이",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 마당",
@@ -379,17 +485,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "예상보다 가벼운 느낌에 놀라는 모습",
       "김여물의 놀란 반응"
     ],
+    forbiddenInThisScene: ["뒷산", "호랑이", "달리기"],
     startCondition: "강민우가 마당 구석의 무거운 물동이를 발견한다",
     startConditionType: "narration",
     endCondition: "김여물이 '도, 도련님?!'이라고 놀라 외친다",
     endConditionType: "dialogue",
     emotionalGoal: "놀라움",
-    plotFunction: "초인적 힘 발견"
+    plotFunction: "초인적 힘 발견",
+    connectionToPrevious: "마당에서 힘 테스트",
+    connectionToNext: "달리기 테스트"
   },
   {
-    sceneNumber: 15,
+    sceneNumber: 17,
     title: "뒷산으로",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처 뒤 산길",
@@ -400,17 +510,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "숨이 차지 않는 것에 놀라는 모습",
       "김여물이 뒤처지는 장면"
     ],
+    forbiddenInThisScene: ["산 정상 도착", "호랑이", "희망"],
     startCondition: "강민우가 '산을 뛰어보자'라며 뒷산을 향해 달린다",
     startConditionType: "action",
     endCondition: "강민우가 뒤를 돌아보며 '왜 이렇게 느려?'라고 묻는다",
     endConditionType: "dialogue",
     emotionalGoal: "흥분",
-    plotFunction: "초인적 체력 확인"
+    plotFunction: "초인적 체력 확인",
+    connectionToPrevious: "힘 확인 후 체력 테스트",
+    connectionToNext: "산 정상 도착"
   },
   {
-    sceneNumber: 16,
+    sceneNumber: 18,
     title: "산 정상",
-    targetWordCount: 2500,
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 뒷산 정상",
@@ -421,17 +535,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "조선시대 풍경 묘사",
       "희망을 느끼는 내적 독백"
     ],
+    forbiddenInThisScene: ["호랑이", "하산", "위기"],
     startCondition: "강민우가 산 정상에 도착해 숨을 고른다",
     startConditionType: "action",
     endCondition: "강민우가 '이 힘이라면... 어쩌면...'이라고 중얼거린다",
     endConditionType: "dialogue",
     emotionalGoal: "희망",
-    plotFunction: "가능성 인식"
+    plotFunction: "가능성 인식",
+    connectionToPrevious: "산을 달려 올라옴",
+    connectionToNext: "하산 중 위기"
   },
   {
-    sceneNumber: 17,
+    sceneNumber: 19,
     title: "호랑이 등장",
-    targetWordCount: 4000,
+    targetWordCount: 2500,
+    sceneType: "important",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 뒷산 숲속",
@@ -442,17 +560,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "덤불에서 호랑이가 튀어나오는 장면",
       "호랑이가 김여물을 덮치려는 순간"
     ],
+    forbiddenInThisScene: ["호랑이 제압", "귀환", "저녁"],
     startCondition: "산을 내려오던 강민우가 갑자기 발걸음을 멈춘다",
     startConditionType: "action",
     endCondition: "호랑이가 김여물을 향해 도약한다",
     endConditionType: "action",
     emotionalGoal: "긴장",
-    plotFunction: "위기 발생"
+    plotFunction: "위기 발생",
+    connectionToPrevious: "산 정상에서 내려오는 중",
+    connectionToNext: "호랑이 제압"
   },
   {
-    sceneNumber: 18,
+    sceneNumber: 20,
     title: "호랑이 제압",
-    targetWordCount: 5000,
+    targetWordCount: 3000,
+    sceneType: "climax",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 뒷산 숲속",
@@ -463,19 +585,23 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "호랑이 머리를 맨손으로 움켜쥐는 장면",
       "호랑이를 제압하고 쓰러뜨리는 장면"
     ],
+    forbiddenInThisScene: ["귀환", "저녁", "결심"],
     startCondition: "강민우가 '안 돼!'라고 외치며 몸을 날린다",
     startConditionType: "dialogue",
     endCondition: "호랑이가 쓰러지고, 김여물이 '도, 도련님...'이라고 말을 잇지 못한다",
     endConditionType: "dialogue",
     emotionalGoal: "각성",
-    plotFunction: "초인적 무력 발현"
+    plotFunction: "초인적 무력 발현",
+    connectionToPrevious: "호랑이가 김여물 공격",
+    connectionToNext: "귀환"
   },
 
-  // ========== 결심과 준비 파트 (씬 19-24) ==========
+  // ========== 결심과 준비 파트 (씬 21-26) ==========
   {
-    sceneNumber: 19,
+    sceneNumber: 21,
     title: "귀환",
-    targetWordCount: 2500,
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처",
@@ -486,17 +612,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "김여물이 아직도 놀라워하는 모습",
       "저녁상이 차려진 모습"
     ],
+    forbiddenInThisScene: ["음식 맛", "임진왜란", "결심"],
     startCondition: "강민우와 김여물이 거처 대문을 들어선다",
     startConditionType: "action",
     endCondition: "강민우가 저녁상 앞에 앉는다",
     endConditionType: "action",
     emotionalGoal: "안도",
-    plotFunction: "일상 복귀"
+    plotFunction: "일상 복귀",
+    connectionToPrevious: "호랑이 제압 후",
+    connectionToNext: "저녁 식사"
   },
   {
-    sceneNumber: 20,
+    sceneNumber: 22,
     title: "조선 음식",
-    targetWordCount: 2500,
+    targetWordCount: 1500,
+    sceneType: "mini",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처",
@@ -507,17 +637,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "현대 음식과 비교하는 내적 독백",
       "의외로 맛있다는 반응"
     ],
+    forbiddenInThisScene: ["임진왜란", "결심", "시장"],
     startCondition: "강민우가 숟가락을 들고 밥을 떠먹는다",
     startConditionType: "action",
     endCondition: "강민우가 '생각보다 괜찮네'라고 혼잣말한다",
     endConditionType: "dialogue",
     emotionalGoal: "적응",
-    plotFunction: "조선 생활 적응 시작"
+    plotFunction: "조선 생활 적응 시작",
+    connectionToPrevious: "저녁상 앞에 앉음",
+    connectionToNext: "밤 고민"
   },
   {
-    sceneNumber: 21,
+    sceneNumber: 23,
     title: "임진왜란 고민",
-    targetWordCount: 3500,
+    targetWordCount: 2000,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처",
@@ -528,17 +662,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "역사를 바꿀 수 있을지 고민",
       "이순신, 황진 등 역사 지식 활용 가능성"
     ],
+    forbiddenInThisScene: ["결심 선언", "시장", "배돌쇠"],
     startCondition: "강민우가 밤하늘의 달을 바라보며 생각에 잠긴다",
     startConditionType: "narration",
     endCondition: "강민우가 '역사를 바꿀 수 있을까...'라고 중얼거린다",
     endConditionType: "dialogue",
     emotionalGoal: "고뇌",
-    plotFunction: "목표 설정 준비"
+    plotFunction: "목표 설정 준비",
+    connectionToPrevious: "저녁 식사 후",
+    connectionToNext: "결심"
   },
   {
-    sceneNumber: 22,
+    sceneNumber: 24,
     title: "결심",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "important",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 황진의 거처",
@@ -549,20 +687,23 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "주먹을 불끈 쥐는 동작",
       "역사를 바꾸겠다는 선언"
     ],
+    forbiddenInThisScene: ["시장", "배돌쇠", "다음 날"],
     startCondition: "강민우가 자리에서 벌떡 일어선다",
     startConditionType: "action",
     endCondition: "강민우가 '좋아. 역사를 바꿔보자'라고 결심한다",
     endConditionType: "dialogue",
     emotionalGoal: "결의",
-    plotFunction: "목표 확정"
+    plotFunction: "목표 확정",
+    connectionToPrevious: "임진왜란 고민 끝",
+    connectionToNext: "시장 방문"
   },
 
-  // 여기에 더 많은 씬 추가 가능 (23-50)
-  // 시장, 배돌쇠, 이서준, 훈련 등의 파트를 각각 3-5개 씬으로 분할
+  // ========== 시장 파트 (씬 25-27) ==========
   {
-    sceneNumber: 23,
+    sceneNumber: 25,
     title: "시장 도착",
-    targetWordCount: 3000,
+    targetWordCount: 2000,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 시장 입구",
@@ -573,17 +714,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "김여물의 안내를 받는 장면",
       "현대와 다른 시장 모습에 놀라는 강민우"
     ],
+    forbiddenInThisScene: ["배돌쇠", "불량배", "구출"],
     startCondition: "강민우가 시장 입구에 서서 주변을 둘러본다",
     startConditionType: "action",
     endCondition: "강민우가 '생각보다 활기차네'라고 중얼거린다",
     endConditionType: "dialogue",
     emotionalGoal: "호기심",
-    plotFunction: "조선 사회 경험"
+    plotFunction: "조선 사회 경험",
+    connectionToPrevious: "결심 후 다음 날",
+    connectionToNext: "시장 탐방 중 소란"
   },
   {
-    sceneNumber: 24,
+    sceneNumber: 26,
     title: "배돌쇠 구출",
-    targetWordCount: 4000,
+    targetWordCount: 2500,
+    sceneType: "important",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 시장",
@@ -594,17 +739,21 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "불량배들을 제압하는 강민우",
       "구해준 청년이 배돌쇠임을 알게 됨"
     ],
+    forbiddenInThisScene: ["충성 맹세", "거처 복귀"],
     startCondition: "시장 골목에서 소란이 들린다",
     startConditionType: "narration",
     endCondition: "배돌쇠가 '이 은혜를 잊지 않겠습니다!'라고 외친다",
     endConditionType: "dialogue",
     emotionalGoal: "정의감",
-    plotFunction: "첫 조력자 획득"
+    plotFunction: "첫 조력자 획득",
+    connectionToPrevious: "시장 둘러보던 중",
+    connectionToNext: "배돌쇠 충성"
   },
   {
-    sceneNumber: 25,
+    sceneNumber: 27,
     title: "배돌쇠 충성",
-    targetWordCount: 2500,
+    targetWordCount: 1800,
+    sceneType: "normal",
     pov: "강민우(황진)",
     povType: "third-limited",
     location: "남원 시장",
@@ -615,21 +764,25 @@ export const HWANGJIN_VOLUME_1_SCENES: Volume1SceneTemplate[] = [
       "강민우가 일으켜 세우는 장면",
       "김여물이 배돌쇠를 의심하는 눈빛"
     ],
+    forbiddenInThisScene: ["다음 권 내용", "훈련", "이서준"],
     startCondition: "배돌쇠가 '도련님!'이라 부르며 무릎을 꿇는다",
     startConditionType: "dialogue",
     endCondition: "강민우가 '일어나. 앞으로 잘해보자'라고 말한다",
     endConditionType: "dialogue",
     emotionalGoal: "유대감",
-    plotFunction: "조력자 확보 완료"
+    plotFunction: "조력자 확보 완료",
+    connectionToPrevious: "배돌쇠 구출",
+    connectionToNext: "1권 마무리"
   },
   // 나머지 씬들은 AI가 generateScenePlanningPrompt로 자동 생성
-  // 여기는 예시 템플릿일 뿐, 실제 사용 시 AI가 50개 씬을 생성함
+  // 여기는 예시 템플릿일 뿐, 실제 사용 시 AI가 80~100개 씬을 생성함
 ];
 
-// 💡 참고: 위 템플릿은 25개 씬의 예시입니다.
+// 💡 참고: 위 템플릿은 27개 씬의 예시입니다.
 // 실제 20만자 권을 기획할 때는 generateScenePlanningPrompt()가
-// AI를 통해 40~60개의 씬을 자동 생성합니다.
-// 씬당 평균 4,000자로 계산: 200,000자 ÷ 4,000자 = 50개 씬
+// AI를 통해 80~100개의 씬을 자동 생성합니다.
+// 씬당 평균 2,000자로 계산: 200,000자 ÷ 2,000자 = 100개 씬
+// 씬을 더 작게 나눠서 AI가 씬 경계를 넘지 않도록 합니다.
 
 // ============================================
 // 씬 프롬프트 생성 함수
@@ -807,6 +960,7 @@ function generateSceneSystemPrompt(
 ║  ⛔ 이 씬에 정해진 내용만 작성!!!                            ║
 ║  ⛔ 아래 mustInclude 외 새로운 사건 금지!!!                  ║
 ║  ⛔ 위에 정해진 장소/시간/인물 외 등장 금지!!!               ║
+║  ⛔ 목표 분량의 50~60%만 써도 충분!!!                        ║
 ╚══════════════════════════════════════════════════════════════╝
 
 **금지:**
@@ -816,6 +970,11 @@ function generateSceneSystemPrompt(
 - ❌ 다음 씬 내용 미리 작성
 - ❌ 이전 씬 내용 다시 작성
 - ❌ 분량 채우려고 새 사건/인물/장소 추가
+
+**분량 규칙 (핵심!):**
+- 목표 ${scene.targetWordCount}자는 최대치입니다
+- 실제로는 **${Math.round(scene.targetWordCount * 0.5)}~${Math.round(scene.targetWordCount * 0.6)}자**만 쓰세요!
+- 종료조건 도달 시 분량 관계없이 즉시 멈추세요
 
 **분량 부족 시:**
 → 새 사건 추가 금지! 현재 장면의 감정/분위기/디테일을 깊게!
@@ -940,112 +1099,206 @@ export function generateScenePlanningPrompt(
   targetWordCount: number,
   previousVolumeSummary?: string
 ): string {
-  // 🔒 씬 수 자동 계산 (최소 40개, 20만자 기준)
-  // 일반 씬: 2000~5000자, 중요 씬: 5000~8000자
-  // 평균 4000자 기준으로 계산
-  const AVERAGE_WORDS_PER_SCENE = 4000;
-  const MIN_SCENES = 40;
+  // 🔴 v3.0: 씬을 더 잘게 나눔 (평균 2000자, 최소 80개)
+  // 씬이 작을수록 AI가 범위를 벗어날 확률이 줄어듦
+  const AVERAGE_WORDS_PER_SCENE = 2000; // 4000 → 2000으로 대폭 하향
+  const MIN_SCENES = 80; // 40 → 80으로 상향
   const calculatedSceneCount = Math.max(MIN_SCENES, Math.ceil(targetWordCount / AVERAGE_WORDS_PER_SCENE));
   const actualSceneCount = Math.max(targetSceneCount, calculatedSceneCount);
 
   // 씬당 평균 분량 계산
   const averageWordsPerScene = Math.floor(targetWordCount / actualSceneCount);
 
+  console.log(`[ScenePromptGenerator] 🔴 v3.0 정교한 기획 모드`);
   console.log(`[ScenePromptGenerator] 권 분량: ${targetWordCount.toLocaleString()}자`);
   console.log(`[ScenePromptGenerator] 계산된 씬 수: ${actualSceneCount}개 (요청: ${targetSceneCount}개)`);
   console.log(`[ScenePromptGenerator] 씬당 평균 분량: ${averageWordsPerScene.toLocaleString()}자`);
 
-  return `당신은 소설 기획 전문가입니다. 아래 권의 씬 분할표를 작성해주세요.
+  return `당신은 **베스트셀러 소설 기획 전문가**입니다.
+아래 규칙을 **100% 준수**하여 씬 분할표를 작성하세요.
 
-## 작품 정보
+# 🎯 핵심 원칙
+> "씬이 작을수록 글이 정교해진다"
+> 씬 하나 = 5분 이내의 연속된 장면
+> 대사 하나하나까지 기획하라
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📚 작품 정보
 - 작품명: ${project.title}
 - 장르: ${project.genre.join(', ')}
 - 컨셉: ${project.concept}
 
-## ${volumeNumber}권 "${volumeTitle}" 정보
-- 시작점: ${volumeStartPoint}
-- 종료점: ${volumeEndPoint}
-- 핵심 사건: ${volumeCoreEvent}
-- 목표 분량: ${targetWordCount.toLocaleString()}자
-${previousVolumeSummary ? `- 이전 권 요약: ${previousVolumeSummary}` : ''}
+## 📖 ${volumeNumber}권 "${volumeTitle}" 정보
+- **시작점**: ${volumeStartPoint}
+- **종료점**: ${volumeEndPoint}
+- **핵심 사건**: ${volumeCoreEvent}
+- **목표 분량**: ${targetWordCount.toLocaleString()}자
+${previousVolumeSummary ? `- **이전 권 요약**: ${previousVolumeSummary}` : ''}
 
-## 🔴🔴🔴 중요: 씬 분량 규칙 🔴🔴🔴
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**하나의 씬 = 하나의 연속된 장면 (시간 점프 없음!)**
-
-| 씬 유형 | 분량 | 설명 |
-|---------|------|------|
-| 일반 씬 | 2,000~4,000자 | 대화, 이동, 일상 장면 |
-| 중요 씬 | 4,000~6,000자 | 갈등, 액션, 감정적 장면 |
-| 클라이맥스 씬 | 6,000~8,000자 | 전투, 고백, 반전 |
-
-**⛔ 8,000자 초과 금지! → 씬을 더 잘게 나눠야 함**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## 필수 씬 수: ${actualSceneCount}개 (±5개)
-→ 권 분량 ${targetWordCount.toLocaleString()}자 ÷ 평균 ${averageWordsPerScene.toLocaleString()}자 = ${actualSceneCount}개
+## 🔴🔴🔴 씬 분량 규칙 (매우 중요!) 🔴🔴🔴
 
-## 출력 형식 (JSON)
+| 씬 유형 | 분량 | 설명 | 예시 |
+|---------|------|------|------|
+| **미니 씬** | 800~1,500자 | 짧은 대화, 반응, 순간적 감정 | 눈빛 교환, 한마디 대화 |
+| **일반 씬** | 1,500~2,500자 | 하나의 대화 주제, 하나의 행동 | 대화 한 묶음, 이동 중 생각 |
+| **중요 씬** | 2,500~3,500자 | 감정 고조, 소규모 갈등 | 말다툼, 고백 직전 |
+| **클라이맥스** | 3,500~4,500자 | 결정적 순간, 반전 | 정체 발각, 전투 시작 |
+
+### ⛔ 절대 금지
+- **4,500자 초과 금지** → 반드시 2개 이상 씬으로 분할
+- **시간 점프 금지** → 점프가 필요하면 별도 "전환 씬" 생성
+- **장소 이동 금지** → 이동 시 별도 "이동 씬" 생성
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📊 필수 씬 수: **${actualSceneCount}개** (±10개)
+
+계산:
+- 권 분량: ${targetWordCount.toLocaleString()}자
+- 씬당 평균: ${averageWordsPerScene.toLocaleString()}자
+- 필요 씬 수: **${actualSceneCount}개**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 📝 출력 형식 (JSON)
 
 \`\`\`json
 {
+  "volumeInfo": {
+    "volumeNumber": ${volumeNumber},
+    "title": "${volumeTitle}",
+    "totalScenes": ${actualSceneCount},
+    "totalWordCount": ${targetWordCount}
+  },
   "scenes": [
     {
       "sceneNumber": 1,
-      "title": "씬 제목 (5자 이내)",
-      "targetWordCount": 3000,
-      "pov": "시점 인물 이름",
+      "title": "씬 제목 (4자 이내, 한글)",
+      "targetWordCount": 2000,
+      "sceneType": "normal",
+      "pov": "시점 인물 전체 이름",
       "povType": "third-limited",
-      "location": "구체적인 장소 (하나만!)",
-      "timeframe": "구체적인 시간대 (연속된 시간)",
+      "location": "구체적 장소 (예: 남원 황진의 거처 마당)",
+      "timeframe": "구체적 시간 (예: 1590년 3월 15일, 오전 7시경)",
       "participants": ["등장인물1", "등장인물2"],
       "mustInclude": [
-        "반드시 포함할 내용 1 (구체적 행동/대사)",
-        "반드시 포함할 내용 2",
-        "반드시 포함할 내용 3"
+        "구체적 대사: '실제 대사 내용'",
+        "구체적 행동: 주인공이 ~하는 장면",
+        "구체적 감정: ~한 표정을 짓다"
       ],
-      "startCondition": "이 씬의 정확한 시작점 (첫 문장으로 쓸 수 있는 구체적인 대사나 행동)",
+      "forbiddenInThisScene": [
+        "다음 씬에서 다룰 키워드",
+        "아직 등장하면 안 되는 인물"
+      ],
+      "startCondition": "정확한 시작 대사 또는 행동 (예: '주인공이 문을 열며 \"안녕\"이라고 말한다')",
       "startConditionType": "dialogue",
-      "endCondition": "이 씬의 정확한 종료점 (마지막 문장으로 쓸 수 있는 구체적인 대사나 행동)",
+      "endCondition": "정확한 종료 대사 또는 행동 (예: '주인공이 고개를 끄덕이며 \"알겠어\"라고 대답한다')",
       "endConditionType": "dialogue",
-      "emotionalGoal": "이 씬의 감정적 목표 (한 단어)",
-      "plotFunction": "이 씬이 플롯에서 하는 역할"
+      "emotionalGoal": "한 단어 (예: 혼란, 결의, 분노)",
+      "plotFunction": "이 씬의 플롯 역할 (예: 갈등 고조, 정보 획득)",
+      "connectionToPrevious": "이전 씬과 어떻게 연결되는지",
+      "connectionToNext": "다음 씬으로 어떻게 이어지는지",
+      "notes": "집필 시 주의사항 (선택)"
     }
   ]
 }
 \`\`\`
 
-## 🔴 필수 규칙 (위반 시 재생성!)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-### 1️⃣ 씬 분량 엄수
-- 일반 씬: 2,000~4,000자
-- 중요 씬: 4,000~6,000자
-- 클라이맥스 씬: 6,000~8,000자
-- **8,000자 초과 절대 금지!**
+## 🔴 필수 규칙 (위반 시 전체 재생성!)
 
-### 2️⃣ 하나의 씬 = 하나의 연속된 장면
-- 장소: 하나만 (이동 시 씬 분리)
-- 시간: 연속 (시간 점프 시 씬 분리)
-- 등장인물: 2~5명 이내
+### 1️⃣ endCondition 작성 규칙 (가장 중요!)
 
-### 3️⃣ 시작/종료 조건은 구체적으로
-- ❌ "강민우가 강의를 시작한다" (너무 추상적)
-- ✅ "강민우가 '자, 오늘 강의를 시작하겠습니다'라고 말한다" (구체적)
+**❌ 나쁜 예시 (추상적 → 금지!):**
+- "강민우가 결심한다"
+- "두 사람이 화해한다"
+- "시간이 흐른다"
+- "전투가 끝난다"
 
-### 4️⃣ mustInclude는 3~5개 (행동/대사 중심)
-- ❌ "강민우의 내면 갈등" (추상적)
-- ✅ "강민우가 '진짜 황진이 맞아?'라고 스스로에게 묻는 장면" (구체적)
+**✅ 좋은 예시 (구체적 대사/행동):**
+- "강민우가 '좋아, 해보자'라고 말하며 주먹을 불끈 쥔다"
+- "김여물이 '알겠습니다, 도련님'이라고 대답하며 고개를 숙인다"
+- "주인공이 문을 닫으며 '내일 보자'라고 말한다"
+- "호랑이가 쓰러지고 김여물이 '도, 도련님...'이라고 말을 잇지 못한다"
 
-### 5️⃣ 씬 연결
-- N씬의 endCondition과 N+1씬의 startCondition이 자연스럽게 연결
-- 시간 점프가 필요하면 별도의 "전환 씬"으로 처리
+### 2️⃣ mustInclude 작성 규칙
 
-### 6️⃣ 총 분량 확인
-- 모든 씬의 targetWordCount 합 = ${targetWordCount.toLocaleString()}자 (±10%)
+**❌ 나쁜 예시 (추상적):**
+- "강민우의 내면 갈등"
+- "두 사람의 관계 발전"
+- "긴장감 있는 대화"
 
-## 씬 수: ${actualSceneCount}개를 반드시 생성하세요!
+**✅ 좋은 예시 (구체적 대사/행동):**
+- "강민우가 '정말 내가 황진이야?'라고 스스로에게 묻는 독백"
+- "김여물이 물동이를 들고 오는 장면"
+- "강민우가 '이 시대에서 살아남아야 해'라고 결심하는 대사"
 
-JSON만 출력하세요. 다른 설명은 필요 없습니다.`;
+### 3️⃣ forbiddenInThisScene 필수 작성
+
+각 씬에서 **다음 씬에서 다룰 내용**을 명시:
+\`\`\`json
+"forbiddenInThisScene": [
+  "시장 (→ 23씬에서 등장)",
+  "배돌쇠 (→ 24씬에서 첫 등장)",
+  "호랑이 (→ 17씬에서 등장)"
+]
+\`\`\`
+
+### 4️⃣ 씬 연결 필수
+
+- N씬의 \`endCondition\` = N+1씬의 \`startCondition\`과 자연스럽게 연결
+- 시간 점프 필요 시 → "전환 씬" 추가 (예: "다음 날 아침이 밝았다")
+- 장소 이동 필요 시 → "이동 씬" 추가 (예: "마을로 향하는 길")
+
+### 5️⃣ 분량 검증
+
+| 검증 항목 | 기준 |
+|----------|------|
+| 씬당 최대 | **4,500자 이하** |
+| 씬당 최소 | **800자 이상** |
+| 총 분량 합 | ${targetWordCount.toLocaleString()}자 (±10%) |
+| 씬 개수 | **${actualSceneCount}개** (±10개) |
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🎬 씬 유형별 가이드
+
+### 🔹 미니 씬 (800~1,500자)
+- 눈빛 교환, 짧은 반응
+- 예: "강민우가 놀란 눈으로 김여물을 바라본다 → 김여물이 '괜찮으십니까?'라고 묻는다"
+
+### 🔹 일반 씬 (1,500~2,500자)
+- 하나의 대화 주제
+- 예: "강민우와 김여물이 현재 상황에 대해 대화한다"
+
+### 🔹 중요 씬 (2,500~3,500자)
+- 감정 변화, 갈등 발생
+- 예: "강민우가 자신의 정체를 깨닫고 충격받는 장면"
+
+### 🔹 클라이맥스 씬 (3,500~4,500자)
+- 결정적 순간, 반전
+- 예: "호랑이와의 대결 장면"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## ⚠️ 최종 확인
+
+기획 완료 전 반드시 확인:
+1. ✅ 모든 endCondition이 구체적 대사/행동인가?
+2. ✅ 모든 씬이 4,500자 이하인가?
+3. ✅ 총 씬 수가 ${actualSceneCount}개 (±10개)인가?
+4. ✅ 총 분량이 ${targetWordCount.toLocaleString()}자 (±10%)인가?
+5. ✅ 모든 forbiddenInThisScene이 작성되었는가?
+6. ✅ 씬 연결이 자연스러운가?
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**이제 ${actualSceneCount}개의 정교한 씬을 JSON으로 생성하세요.**
+다른 설명 없이 JSON만 출력하세요.`;
 }
 
 // ============================================
@@ -1062,15 +1315,21 @@ export function templateToSceneStructure(
     sceneNumber: template.sceneNumber,
     title: template.title,
     targetWordCount: template.targetWordCount,
+    sceneType: template.sceneType, // v3.0
     pov: template.pov,
     povType: template.povType,
     location: template.location,
     timeframe: template.timeframe,
     participants: template.participants,
     mustInclude: template.mustInclude,
+    forbiddenInThisScene: template.forbiddenInThisScene, // v3.0
     startCondition: template.startCondition,
     endCondition: template.endCondition,
     endConditionType: template.endConditionType,
+    emotionalGoal: template.emotionalGoal, // v3.0
+    plotFunction: template.plotFunction, // v3.0
+    connectionToPrevious: template.connectionToPrevious, // v3.0
+    connectionToNext: template.connectionToNext, // v3.0
     status: 'pending',
     actualWordCount: 0,
     createdAt: new Date(),

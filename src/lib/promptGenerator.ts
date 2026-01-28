@@ -1,7 +1,7 @@
 /**
- * 소설 집필 프롬프트 생성 시스템 v2.0
+ * 소설 집필 프롬프트 생성 시스템 v7.0
  *
- * 모든 기획 데이터를 집필에 반드시 반영하는 강화된 시스템:
+ * 세계 최고 수준 문학 품질을 위한 통합 프롬프트 시스템:
  * - 권/씬 단위로 정확한 분량과 종료점
  * - 모든 기획 데이터(캐릭터, 세계관, 플롯, 복선, 갈등) 필수 포함
  * - 스토리 분석 기반 일관성 검증
@@ -9,6 +9,17 @@
  * - 캐릭터 상태 추적 (사망/감금 등)
  * - 중복 내용 방지
  * - 베스트셀러 작가 워크플로우 통합
+ * - [v6.0] 문체 일관성 관리 (StyleConsistencyManager)
+ * - [v6.0] 감정 깊이 강화 (EmotionDepthEngine)
+ * - [v6.0] 복선/떡밥 추적 (ForeshadowingTracker)
+ * - [v6.0] 캐릭터 음성 일관성 (CharacterVoiceManager)
+ * - [v7.0] 5단계 퇴고 시스템 (RevisionEngine)
+ * - [v7.0] 씬 간 일관성 검증 (SceneCoherenceValidator)
+ * - [v7.0] 문장 품질 평가기 (ProseQualityAnalyzer)
+ * - [v7.0] 서사 아크 검증 (NarrativeArcValidator)
+ * - [v7.0] 문학적 깊이 엔진 (LiteraryDepthEngine)
+ * - [v7.0] 감각 몰입 시스템 (SensoryImmersionSystem)
+ * - [v7.0] 대화 마스터 시스템 (DialogueMasterSystem)
  */
 
 import type {
@@ -59,6 +70,38 @@ import {
   generateValidationRulesForPrompt,
 } from './sceneValidator';
 
+// v6.0: 상업 출판 수준 시스템 임포트
+import {
+  StyleConsistencyManager,
+  STYLE_PROFILES,
+  type StyleProfile,
+} from './styleConsistencyManager';
+
+import {
+  EmotionDepthEngine,
+  type EmotionState,
+  type PrimaryEmotion,
+} from './emotionDepthEngine';
+
+import {
+  ForeshadowingTracker as ForeshadowingTrackerV6,
+} from './foreshadowingTracker';
+
+import {
+  CharacterVoiceManager,
+  PREDEFINED_VOICES,
+  type CharacterVoice,
+} from './characterVoiceManager';
+
+// v7.0: 세계 최고 수준 문학 시스템 임포트
+import { RevisionEngine } from './revisionEngine';
+import { SceneCoherenceValidator } from './sceneCoherenceValidator';
+import { ProseQualityAnalyzer } from './proseQualityAnalyzer';
+import { NarrativeArcValidator } from './narrativeArcValidator';
+import { LiteraryDepthEngine } from './literaryDepthEngine';
+import { SensoryImmersionSystem } from './sensoryImmersionSystem';
+import { DialogueMasterSystem } from './dialogueMasterSystem';
+
 // ============================================
 // 컨텍스트 데이터 타입 정의
 // ============================================
@@ -80,6 +123,10 @@ export interface FullContext {
   setupPayoffs?: SetupPayoff[];
   emotionalArcs?: EmotionalArc[];
   writingGuidelines?: WritingGuidelines;
+
+  // v7.0: 씬 간 일관성 및 서사 구조
+  previousSceneText?: string;       // 이전 씬의 실제 텍스트 (마지막 부분)
+  totalScenesInVolume?: number;     // 권 내 총 씬 수
 }
 
 // ============================================
@@ -1139,6 +1186,9 @@ export function generateScenePrompt(
     setupPayoffs?: SetupPayoff[];
     emotionalArc?: EmotionalArc;
     writingGuidelines?: WritingGuidelines;
+    // v7.0: 세계 최고 수준 문학 시스템 옵션
+    previousSceneText?: string;
+    totalScenesInVolume?: number;
   }
 ): GeneratedPrompt {
   // 캐릭터 이름 목록 추출 (역사 검증용)
@@ -1303,15 +1353,37 @@ ${sd.avoid.map(a => `- ❌ ${a}`).join('\n')}
   console.log('[promptGenerator] 종료조건:', scene.endCondition);
   console.log('[promptGenerator] 목표글자수:', scene.targetWordCount);
 
+  // 🔴 NEW v5.0: 다음 씬 정보 추출 (미리 쓰면 안 되는 내용)
+  const allScenes = volume.scenes || [];
+  const currentSceneIndex = allScenes.findIndex(s => s.id === scene.id || s.sceneNumber === scene.sceneNumber);
+  const nextScene = currentSceneIndex >= 0 && currentSceneIndex < allScenes.length - 1
+    ? allScenes[currentSceneIndex + 1]
+    : null;
+
+  // 🔴 v3.0: forbiddenInThisScene 우선 사용, 없으면 자동 추출
+  const sceneForbidden = scene.forbiddenInThisScene || [];
+  const nextSceneForbiddenKeywords = [
+    ...sceneForbidden, // 씬에 명시된 금지 키워드
+    ...(nextScene
+      ? [
+          nextScene.title,
+          ...(nextScene.mustInclude || []).slice(0, 3).map(m => m.split(' ').slice(0, 3).join(' ')),
+          nextScene.location !== scene.location ? nextScene.location : null,
+          ...(nextScene.participants || []).filter(p => !scene.participants.includes(p)),
+        ]
+      : []),
+  ].filter(Boolean) as string[];
+
   const userPrompt = `# 🛑🛑🛑 최우선 명령: 종료조건 준수! 🛑🛑🛑
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⛔ 이 씬은 "${scene.endCondition}" 에서 끝나야 합니다!
 ⛔ 종료조건에 도달하면 즉시 멈추세요!
 ⛔ 분량이 부족해도 상관없습니다 - 종료조건이 최우선!
+⛔ 목표 분량의 50~60%만 채워도 충분합니다!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## 이 씬의 범위 (벗어나면 실패!)
+## 이 씬의 범위 (벗어나면 즉시 실패!)
 
 | 항목 | 값 |
 |------|-----|
@@ -1323,13 +1395,19 @@ ${sd.avoid.map(a => `- ❌ ${a}`).join('\n')}
 
 ## ⛔ 절대 금지 (위반 = 즉시 실패!)
 
-1. **시간 점프 금지**: "며칠 후", "다음 날", "시간이 흘러", "얼마 후", "그 후", "결국", "마침내", "드디어", "이윽고" 등
+1. **시간 점프 금지**: "며칠 후", "다음 날", "시간이 흘러", "얼마 후", "그 후", "결국", "마침내", "드디어", "이윽고", "그리하여" 등
 2. **장소 이동 금지**: ${scene.location || '현재 장소'} 외 다른 장소 묘사 금지
 3. **인물 제한**: ${scene.participants.join(', ') || '지정된 인물'} 외 등장 금지
 4. **종료 이후 금지**: "${scene.endCondition}" 이후 어떤 내용도 작성 금지
 5. **미래 이야기 금지**: 시간여행, 훈련, 수련, 전쟁, 전투 등 (mustInclude에 없으면)
+${nextSceneForbiddenKeywords.length > 0 ? `
+## 🚫🚫🚫 다음 씬 내용 미리 쓰기 금지! 🚫🚫🚫
+아래 키워드가 나오면 당신은 다음 씬을 미리 쓰고 있는 것입니다:
+${nextSceneForbiddenKeywords.map(k => `- ❌ "${k}"`).join('\n')}
+→ 이 키워드들은 다음 씬(${nextScene?.sceneNumber}번 씬)에서 다룹니다. 절대 미리 쓰지 마세요!
+` : ''}
 
-## ✅ 이 씬에서 쓸 내용
+## ✅ 이 씬에서 쓸 내용 (이것만 쓰세요!)
 ${mustIncludeList || '- 씬 시작점에서 종료점까지 자연스럽게 진행'}
 
 ## 📝 등장인물 정보
@@ -1351,12 +1429,34 @@ ${previousSceneSummary ? `**직전 씬**: ${previousSceneSummary.slice(0, 150)}.
 
 1. **시작**: "${scene.startCondition || '이전 씬에서 이어짐'}"
 2. **종료**: "${scene.endCondition}" ← 이 장면 쓰면 즉시 멈춤!
-3. **분량보다 종료조건이 더 중요합니다!**
-   - 목표 ${scene.targetWordCount.toLocaleString()}자는 참고용입니다
-   - 종료조건에 도달하면 분량 상관없이 끝내세요
-   - 분량 채우려고 미래 이야기를 쓰면 실패입니다!
+3. **분량 규칙 (매우 중요!):**
+   - 목표: ${scene.targetWordCount.toLocaleString()}자
+   - 실제로는 **${Math.round(scene.targetWordCount * 0.5).toLocaleString()}~${Math.round(scene.targetWordCount * 0.6).toLocaleString()}자**만 써도 충분합니다
+   - 종료조건에 도달하면 분량 상관없이 즉시 끝내세요
+   - **절대로** 분량 채우려고 새 사건/인물/장소를 추가하지 마세요
 
-이제 소설을 시작하세요. "${scene.endCondition}" 장면을 쓴 후 바로 멈추세요!`;
+## 📝 분량이 부족하다고 느껴질 때:
+- ❌ 새 사건 추가 금지
+- ❌ 새 인물 등장 금지
+- ❌ 시간 점프 금지
+- ✅ 현재 장면의 감정/분위기 더 깊이 묘사
+- ✅ 등장인물의 표정/동작 디테일 추가
+- ✅ 배경 묘사 (${scene.location})를 더 세밀하게
+
+${generateLiteraryEnhancementGuide(scene, project, characters, style, {
+  project,
+  characters,
+  worldSettings,
+  plotStructure,
+  foreshadowings,
+  conflicts,
+  consistencyContext,
+  previousSceneText: enhancedOptions?.previousSceneText,
+  totalScenesInVolume: enhancedOptions?.totalScenesInVolume,
+})}
+
+이제 소설을 시작하세요. "${scene.endCondition}" 장면을 쓴 후 바로 멈추세요!
+(${Math.round(scene.targetWordCount * 0.5).toLocaleString()}자 정도만 써도 충분합니다)`;
 
   return {
     systemPrompt,
@@ -1862,4 +1962,293 @@ export function generateVolumeTemplate(
   }
 
   return template;
+}
+
+
+// ============================================
+// v7.0: 세계 최고 수준 문학적 강화 가이드 생성
+// ============================================
+
+function generateLiteraryEnhancementGuide(
+  scene: SceneStructure,
+  project: Project,
+  characters: Character[],
+  style: WritingStyle,
+  context?: FullContext,
+): string {
+  let guide = '';
+
+  // --- v6.0 시스템 ---
+  // 1. 문체 일관성 가이드
+  guide += generateStyleGuideForScene(project, style);
+
+  // 2. 감정 깊이 가이드
+  guide += generateEmotionGuideForScene(scene);
+
+  // 3. 캐릭터 음성 가이드
+  guide += generateCharacterVoiceGuideForScene(scene, characters);
+
+  // --- v7.0 시스템 ---
+  // 4. 문장 품질 가이드 (클리셰/반복/필터단어 금지)
+  guide += generateProseQualityGuideForScene();
+
+  // 5. 문학적 깊이 가이드 (은유/상징/서브텍스트/아이러니)
+  guide += generateLiteraryDepthGuideForScene(scene, project);
+
+  // 6. 감각 몰입 가이드 (오감 레이어링)
+  guide += generateSensoryGuideForScene(scene, project);
+
+  // 7. 대화 마스터 가이드 (서브텍스트 있는 대화)
+  guide += generateDialogueGuideForScene(scene);
+
+  // 8. 서사 아크 위치 가이드 (현재 씬의 구조적 역할)
+  guide += generateNarrativeArcGuideForScene(scene, context);
+
+  // 9. 씬 간 일관성 가이드 (이전 씬과의 연속성)
+  guide += generateCoherenceGuideForScene(context);
+
+  // 10. 퇴고 내장 지침 (작성하면서 자체 검토)
+  guide += generateInlineRevisionGuide();
+
+  return guide;
+}
+
+/**
+ * 문체 일관성 가이드 생성
+ */
+function generateStyleGuideForScene(project: Project, style: WritingStyle): string {
+  // 프로젝트 장르에 따라 적합한 스타일 프로필 선택
+  const genreArr = Array.isArray(project.genre) ? project.genre : [];
+  const genreStr = genreArr.join(' ');
+  let profileKey = 'literary-fiction';
+
+  if (genreStr.includes('역사') || genreStr.includes('사극') || genreStr.includes('대하')) {
+    profileKey = 'historical-epic';
+  } else if (genreStr.includes('로맨스') || genreStr.includes('연애')) {
+    profileKey = 'romance';
+  } else if (genreStr.includes('액션') || genreStr.includes('판타지') || genreStr.includes('무협')) {
+    profileKey = 'web-novel-action';
+  }
+
+  const profile = STYLE_PROFILES[profileKey];
+  if (!profile) return '';
+
+  const manager = new StyleConsistencyManager(profile);
+  return `
+---
+${manager.generateStyleGuidelines()}
+`;
+}
+
+/**
+ * 감정 깊이 가이드 생성
+ */
+function generateEmotionGuideForScene(scene: SceneStructure): string {
+  const engine = new EmotionDepthEngine();
+
+  // 씬의 감정 목표를 EmotionState로 변환
+  const emotionGoal = scene.emotionalGoal || '';
+  const emotionMap: Record<string, PrimaryEmotion> = {
+    '기쁨': 'joy', '슬픔': 'sadness', '분노': 'anger', '두려움': 'fear',
+    '놀라움': 'surprise', '놀람': 'surprise', '혐오': 'disgust',
+    '사랑': 'love', '신뢰': 'trust', '기대': 'anticipation',
+    '수치심': 'shame', '수치': 'shame', '죄책감': 'guilt',
+    '자부심': 'pride', '질투': 'envy', '외로움': 'loneliness',
+    '향수': 'nostalgia', '희망': 'hope', '절망': 'despair',
+    '혼란': 'confusion', '안도': 'relief', '긴장': 'tension',
+    '열정': 'anticipation', '흥분': 'joy', '공포': 'fear',
+    '당혹': 'confusion', '경악': 'surprise', '결의': 'pride',
+    '호기심': 'anticipation', '적응': 'relief', '고뇌': 'sadness',
+    '정의감': 'anger', '유대감': 'love', '만족감': 'joy',
+    '피로': 'sadness', '충격': 'surprise', '수용': 'relief',
+    '각성': 'surprise',
+  };
+
+  const primaryEmotion = emotionMap[emotionGoal] || 'tension';
+
+  // 씬 타입에 따른 강도 결정
+  let intensity: 1 | 2 | 3 | 4 | 5 = 3;
+  if (scene.sceneType === 'climax') intensity = 5;
+  else if (scene.sceneType === 'important') intensity = 4;
+  else if (scene.sceneType === 'mini') intensity = 2;
+
+  const emotionState: EmotionState = {
+    primary: primaryEmotion,
+    intensity,
+  };
+
+  return engine.generateEmotionGuidelines(emotionState);
+}
+
+/**
+ * 캐릭터 음성 가이드 생성
+ */
+function generateCharacterVoiceGuideForScene(scene: SceneStructure, characters: Character[]): string {
+  const voiceManager = new CharacterVoiceManager();
+
+  // 사전 정의된 음성 프로필 등록
+  for (const [, voice] of Object.entries(PREDEFINED_VOICES)) {
+    voiceManager.registerVoice(voice);
+  }
+
+  // 씬 참여자에 대한 음성 가이드 생성
+  const participantIds = scene.participants;
+
+  // 사전 정의된 프로필이 있는 참여자만 필터
+  const matchedIds: string[] = [];
+  for (const pid of participantIds) {
+    const matchedVoice = Object.values(PREDEFINED_VOICES).find(v =>
+      v.characterName === pid ||
+      v.characterName.includes(pid) ||
+      pid.includes(v.characterName.split('(')[0].trim())
+    );
+    if (matchedVoice) {
+      matchedIds.push(matchedVoice.characterId);
+    }
+  }
+
+  if (matchedIds.length > 0) {
+    return voiceManager.generateVoiceGuide(matchedIds);
+  }
+
+  // 사전 정의된 프로필이 없으면, characters 데이터에서 동적 생성
+  if (characters.length > 0) {
+    return generateDynamicVoiceGuide(scene, characters);
+  }
+
+  return '';
+}
+
+/**
+ * 캐릭터 데이터에서 동적 음성 가이드 생성
+ */
+function generateDynamicVoiceGuide(scene: SceneStructure, characters: Character[]): string {
+  const sceneCharacters = characters.filter(c =>
+    scene.participants.includes(c.id) || scene.participants.includes(c.name)
+  );
+
+  if (sceneCharacters.length === 0) return '';
+
+  let guide = `
+---
+## 🗣️ 캐릭터 음성 일관성 지침
+
+### ⛔ 핵심 원칙
+- 대사만 봐도 누구인지 알 수 있어야 합니다
+- 각 캐릭터의 말투, 어휘, 리듬이 달라야 합니다
+- "~라고 말했다" 서술태그를 최소화하세요
+
+`;
+
+  for (const c of sceneCharacters) {
+    guide += `### 👤 ${c.name}
+- 성격: ${c.personality || '미정'}
+${c.speechStyle ? `- 말투: ${c.speechStyle}` : ''}
+${c.habits ? `- 습관: ${c.habits.join(', ')}` : ''}
+
+`;
+  }
+
+  guide += `### 대사 서술 다양화
+- ❌ 반복 금지: "~라고 말했다" 연속 사용
+- ✅ 행동+대사: "검을 들며 말했다"
+- ✅ 대사만: 들여쓰기로 구분
+- ✅ 반응+대사: 눈이 커졌다. "정말?"
+- ✅ 대사+내면: "그래." 하지만 속으로는 달랐다.
+`;
+
+  return guide;
+}
+
+// ============================================
+// v7.0: 세계 최고 수준 문학 시스템 함수들
+// ============================================
+
+/**
+ * 문장 품질 가이드 (ProseQualityAnalyzer 연동)
+ */
+function generateProseQualityGuideForScene(): string {
+  const analyzer = new ProseQualityAnalyzer();
+  return analyzer.generateQualityGuide();
+}
+
+/**
+ * 문학적 깊이 가이드 (LiteraryDepthEngine 연동)
+ */
+function generateLiteraryDepthGuideForScene(scene: SceneStructure, project: Project): string {
+  const engine = new LiteraryDepthEngine();
+  const themes = Array.isArray(project.genre) ? project.genre : (project.genre ? [project.genre] : []);
+  return engine.generateMasterLiteraryGuide({
+    sceneNumber: scene.sceneNumber,
+    sceneType: scene.sceneType || 'normal',
+    emotionalGoal: scene.emotionalGoal || '',
+    participants: scene.participants || [],
+    themes,
+  });
+}
+
+/**
+ * 감각 몰입 가이드 (SensoryImmersionSystem 연동)
+ */
+function generateSensoryGuideForScene(scene: SceneStructure, project: Project): string {
+  const sensory = new SensoryImmersionSystem();
+  const genreJoined = Array.isArray(project.genre) ? project.genre.join(' ') : '';
+  const isHistorical = genreJoined.includes('역사') || genreJoined.includes('사극') || genreJoined.includes('대하');
+  return sensory.generateSensoryGuide({
+    location: scene.location || '',
+    timeframe: scene.timeframe || '',
+    emotionalGoal: scene.emotionalGoal || '',
+    sceneType: scene.sceneType || 'normal',
+    era: isHistorical ? '조선' : '현대',
+  });
+}
+
+/**
+ * 대화 마스터 가이드 (DialogueMasterSystem 연동)
+ */
+function generateDialogueGuideForScene(scene: SceneStructure): string {
+  const dialogue = new DialogueMasterSystem();
+  return dialogue.generateDialogueGuide({
+    participants: scene.participants || [],
+    emotionalGoal: scene.emotionalGoal || '',
+    sceneType: scene.sceneType || 'normal',
+    hasConflict: !!(scene.plotFunction && (
+      scene.plotFunction.includes('갈등') ||
+      scene.plotFunction.includes('대립') ||
+      scene.plotFunction.includes('충돌') ||
+      scene.plotFunction.includes('싸움') ||
+      scene.plotFunction.includes('전투')
+    )),
+  });
+}
+
+/**
+ * 서사 아크 위치 가이드 (NarrativeArcValidator 연동)
+ */
+function generateNarrativeArcGuideForScene(scene: SceneStructure, context?: FullContext): string {
+  const validator = new NarrativeArcValidator();
+  const totalScenes = context?.totalScenesInVolume || 27;
+  const volumeNumber = 1; // 기본값
+  return validator.generateArcPositionGuide(
+    scene.sceneNumber,
+    totalScenes,
+    volumeNumber,
+  );
+}
+
+/**
+ * 씬 간 일관성 가이드 (SceneCoherenceValidator 연동)
+ */
+function generateCoherenceGuideForScene(context?: FullContext): string {
+  if (!context?.previousSceneText) return '';
+  const validator = new SceneCoherenceValidator();
+  return validator.generateContinuityGuide(null, context.previousSceneText);
+}
+
+/**
+ * 퇴고 내장 지침 (RevisionEngine 연동)
+ */
+function generateInlineRevisionGuide(): string {
+  const revision = new RevisionEngine();
+  return revision.generateInlineRevisionGuide();
 }

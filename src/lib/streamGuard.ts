@@ -17,13 +17,16 @@ import type { SceneStructure } from '@/types';
 export interface StreamGuardConfig {
   scene: SceneStructure;
   allCharacterNames?: string[]; // 프로젝트의 모든 캐릭터 이름 (위반 감지용)
+  allowedLocations?: string[]; // 허용된 장소 목록
+  allowedTimeframes?: string[]; // 허용된 시간대 목록
+  nextSceneKeywords?: string[]; // 다음 씬에서 다룰 키워드 (미리 쓰면 안 되는 것들)
   onViolation?: (violation: StreamViolation) => void;
   onEndConditionMet?: (content: string) => void;
   strictMode?: boolean; // true면 위반 즉시 중단, false면 위반 부분만 제거
 }
 
 export interface StreamViolation {
-  type: 'end_condition_exceeded' | 'time_jump' | 'location_change' | 'new_event' | 'scope_exceeded' | 'unauthorized_character';
+  type: 'end_condition_exceeded' | 'time_jump' | 'location_change' | 'new_event' | 'scope_exceeded' | 'unauthorized_character' | 'next_scene_content' | 'forbidden_keyword';
   severity: 'warning' | 'critical';
   position: number; // 위반이 발생한 위치
   description: string;
@@ -39,11 +42,12 @@ export interface StreamGuardResult {
 }
 
 // ============================================
-// 감지 패턴 정의
+// 감지 패턴 정의 (v2.0 강화)
 // ============================================
 
-// 시간 점프 표현 (즉시 차단)
+// 시간 점프 표현 (즉시 차단) - 더 세밀하게 강화
 const TIME_JUMP_PATTERNS = [
+  // 기본 시간 점프
   /며칠\s*(이|가)?\s*(지나|흘러|후)/,
   /몇\s*달\s*(이|가)?\s*(지나|흘러|후)/,
   /몇\s*년\s*(이|가)?\s*(지나|흘러|후)/,
@@ -59,9 +63,24 @@ const TIME_JUMP_PATTERNS = [
   /\d+\s*(일|주|달|년)\s*(이|가)?\s*(지나|흘러|후)/,
   /어느덧/,
   /드디어.*때가/,
+  // 🔴 추가: 더 많은 시간 점프 패턴
+  /그\s*후로/,
+  /얼마\s*후/,
+  /한참\s*(이|가)?\s*(지나|후)/,
+  /잠시\s*후(?!에)/,  // "잠시 후에"는 허용하되 "잠시 후" 단독은 감지
+  /그날\s*밤/,
+  /그날\s*저녁/,
+  /다음날\s*아침/,
+  /그\s*다음\s*날/,
+  /며칠이\s*지나고/,
+  /날이\s*밝았다/,
+  /해가\s*지고/,
+  /달이\s*뜨고/,
+  /시간은\s*빠르게/,
+  /어느새\s*\d+/,
 ];
 
-// 스토리 압축/요약 표현 (즉시 차단)
+// 스토리 압축/요약 표현 (즉시 차단) - 대폭 강화
 const COMPRESSION_PATTERNS = [
   /결국/,
   /마침내.*되었다/,
@@ -72,6 +91,25 @@ const COMPRESSION_PATTERNS = [
   /임진왜란이/,
   /왜군이.*침략/,
   /일본군이.*상륙/,
+  // 🔴 추가: 기획 범위 벗어남 감지
+  /그리하여/,
+  /이렇게\s*하여/,
+  /그래서\s*결국/,
+  /이야기는\s*여기서/,
+  /훗날/,
+  /후에\s*알게\s*되/,
+  /나중에\s*알게\s*되/,
+  /이것이\s*.*의\s*시작/,
+  /전설이\s*되/,
+  /역사에\s*길이/,
+  /그의\s*이름은\s*.*으로/,
+  /이로써/,
+  /그리하여.*끝을/,
+  // 🔴 씬 간 점프 감지
+  /다른\s*곳에서는/,
+  /그\s*무렵/,
+  /같은\s*시각/,
+  /한편\s*이\s*때/,
 ];
 
 // 새로운 주요 사건 시작 표현
@@ -219,11 +257,11 @@ export class StreamGuard {
       }
     }
 
-    // 4. 🔒🔒🔒 글자수 체크 - 더 빠르게 중단! 🔒🔒🔒
-    // 핵심: maxTokens가 낮아도, 실제 생성량이 너무 많으면 중단
-    // 목표 글자수와 무관하게 절대 상한선 적용 (8000자)
-    const ABSOLUTE_MAX_LENGTH = 8000; // 어떤 씬이든 8000자 초과 금지
-    const targetWordCount = Math.min(this.config.scene.targetWordCount || 10000, ABSOLUTE_MAX_LENGTH);
+    // 4. 🔒🔒🔒 글자수 체크 - 종료조건 우선 방식으로 변경! 🔒🔒🔒
+    // 핵심 변경: 분량보다 종료조건이 먼저!
+    // 목표 글자수의 50%만 도달해도 종료조건 적극적으로 찾기 시작
+    const ABSOLUTE_MAX_LENGTH = 6000; // 🔴 8000 → 6000으로 하향 (씬 범위 초과 방지)
+    const targetWordCount = Math.min(this.config.scene.targetWordCount || 6000, ABSOLUTE_MAX_LENGTH);
     const currentLength = this.accumulatedContent.length;
 
     // 절대 상한선 도달 시 즉시 중단
@@ -244,27 +282,28 @@ export class StreamGuard {
       return { shouldContinue: false, processedChunk: chunk, violation };
     }
 
-    // 목표의 80%에 도달하면 즉시 중단 (종료조건 도달 여부와 무관하게)
-    if (currentLength >= targetWordCount * 0.8) {
+    // 🔴 변경: 60%에서 중단 (80% → 60%)
+    // 종료조건에 도달하지 못해도 60%면 충분
+    if (currentLength >= targetWordCount * 0.6) {
       const violation: StreamViolation = {
         type: 'scope_exceeded',
         severity: 'critical',
         position: currentLength,
-        description: `글자수 80% 도달 (${currentLength}/${targetWordCount})`,
+        description: `글자수 60% 도달 (${currentLength}/${targetWordCount}) - 종료조건 미도달이라도 중단`,
         detectedText: '',
       };
       this.violations.push(violation);
       this.config.onViolation?.(violation);
 
       this.isTerminated = true;
-      this.terminationReason = `글자수 80%(${Math.round(targetWordCount * 0.8)}자) 도달로 인한 중단`;
-      console.log('[StreamGuard] 🛑 글자수 80% 도달! 생성 중단');
+      this.terminationReason = `글자수 60%(${Math.round(targetWordCount * 0.6)}자) 도달로 인한 중단 - 씬 범위 보호`;
+      console.log('[StreamGuard] 🛑 글자수 60% 도달! 씬 범위 보호를 위해 중단');
       return { shouldContinue: false, processedChunk: chunk, violation };
     }
 
-    // 50% 도달 시 경고
-    if (currentLength > targetWordCount * 0.5) {
-      console.log(`[StreamGuard] ⚠️ 글자수 ${Math.round(currentLength / targetWordCount * 100)}% 도달 (${currentLength}/${targetWordCount})`);
+    // 40% 도달 시 종료조건 적극 감지 모드
+    if (currentLength > targetWordCount * 0.4) {
+      console.log(`[StreamGuard] ⚠️ 글자수 ${Math.round(currentLength / targetWordCount * 100)}% 도달 - 종료조건 적극 감시 중`);
     }
 
     // 5. 🔒 허용되지 않은 캐릭터 등장 감지
@@ -280,17 +319,67 @@ export class StreamGuard {
       this.violations.push(violation);
       this.config.onViolation?.(violation);
 
-      // 경고만 하고 계속 진행 (캐릭터 등장은 즉시 중단하지 않음, 하지만 기록)
-      // 너무 많은 미허용 캐릭터가 등장하면 중단
-      const unauthorizedCount = this.violations.filter(v => v.type === 'unauthorized_character').length;
-      if (unauthorizedCount >= 3 && this.config.strictMode) {
+      // 🔴 변경: 미허용 캐릭터 1명만 등장해도 중단 (strictMode일 때)
+      if (this.config.strictMode) {
         this.isTerminated = true;
-        this.terminationReason = `허용되지 않은 캐릭터 ${unauthorizedCount}명 등장`;
+        this.terminationReason = `허용되지 않은 캐릭터 "${unauthorizedCharCheck.characterName}" 등장 - 씬 범위 벗어남`;
         return { shouldContinue: false, processedChunk: chunk, violation };
       }
     }
 
+    // 6. 🔴 NEW: 다음 씬 키워드 감지 (미리 쓰면 안 되는 내용)
+    const nextSceneCheck = this.checkNextSceneContent(textToCheck);
+    if (nextSceneCheck.detected) {
+      const violation: StreamViolation = {
+        type: 'next_scene_content',
+        severity: 'critical',
+        position: checkStart + (nextSceneCheck.position || 0),
+        description: `다음 씬 내용 미리 작성됨: "${nextSceneCheck.keyword}"`,
+        detectedText: nextSceneCheck.matchedText || '',
+      };
+      this.violations.push(violation);
+      this.config.onViolation?.(violation);
+
+      if (this.config.strictMode) {
+        // 다음 씬 내용 직전까지만 유지
+        this.accumulatedContent = this.accumulatedContent.slice(0, checkStart + (nextSceneCheck.position || 0));
+        this.isTerminated = true;
+        this.terminationReason = `다음 씬 내용 감지로 인한 중단: "${nextSceneCheck.keyword}"`;
+        console.log('[StreamGuard] 🛑 다음 씬 내용 감지! 생성 중단');
+        return { shouldContinue: false, processedChunk: '', violation };
+      }
+    }
+
     return { shouldContinue: true, processedChunk: chunk };
+  }
+
+  /**
+   * 다음 씬 키워드 체크
+   */
+  private checkNextSceneContent(text: string): {
+    detected: boolean;
+    keyword?: string;
+    position?: number;
+    matchedText?: string;
+  } {
+    const nextSceneKeywords = this.config.nextSceneKeywords || [];
+    if (nextSceneKeywords.length === 0) return { detected: false };
+
+    for (const keyword of nextSceneKeywords) {
+      if (keyword.length < 2) continue; // 너무 짧은 키워드는 무시
+
+      const index = text.indexOf(keyword);
+      if (index !== -1) {
+        return {
+          detected: true,
+          keyword,
+          position: index,
+          matchedText: text.slice(Math.max(0, index - 20), index + keyword.length + 20),
+        };
+      }
+    }
+
+    return { detected: false };
   }
 
   /**

@@ -447,8 +447,10 @@ export async function generateText(
     const modelName = options?.model || 'gemini-2.0-flash';
     console.log('[Gemini] Creating model:', modelName);
 
-    const maxOutputTokens = options?.maxTokens ?? 8192;
-    console.log('[Gemini] Setting maxOutputTokens:', maxOutputTokens);
+    // 🔴 v2.0: maxTokens 기본값을 4096으로 대폭 하향 (씬 범위 초과 방지)
+    // 8192 → 4096: 씬당 평균 3000~4000자에 맞춤
+    const maxOutputTokens = options?.maxTokens ?? 4096;
+    console.log('[Gemini] Setting maxOutputTokens:', maxOutputTokens, '(기본값 4096으로 하향)');
 
     const model = ai.getGenerativeModel({
       model: modelName,
@@ -599,7 +601,8 @@ export async function* generateTextStream(
       model: modelName,
       generationConfig: {
         temperature: options?.temperature ?? 0.8,
-        maxOutputTokens: options?.maxTokens ?? 8192,
+        // 🔴 v2.0: 스트리밍도 4096으로 하향
+        maxOutputTokens: options?.maxTokens ?? 4096,
         topP: options?.topP ?? 0.95,
         topK: options?.topK ?? 40,
       },

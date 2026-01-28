@@ -10,23 +10,28 @@
 import { generateScenePlanningPrompt, Volume1SceneTemplate } from './scenePromptGenerator';
 import type { Project, SceneStructure } from '@/types';
 
-// AI 응답 파싱 결과 타입
+// AI 응답 파싱 결과 타입 (v3.0 - 더 정교한 씬 기획)
 export interface ParsedSceneData {
   sceneNumber: number;
   title: string;
   targetWordCount: number;
+  sceneType: 'mini' | 'normal' | 'important' | 'climax'; // 씬 유형
   pov: string;
   povType: 'first' | 'third-limited' | 'omniscient';
   location: string;
   timeframe: string;
   participants: string[];
   mustInclude: string[];
+  forbiddenInThisScene: string[]; // 이 씬에서 언급하면 안되는 키워드
   startCondition: string;
   startConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
   endCondition: string;
   endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
   emotionalGoal: string;
   plotFunction: string;
+  connectionToPrevious?: string; // 이전 씬과의 연결
+  connectionToNext?: string; // 다음 씬으로의 연결
+  notes?: string; // 추가 메모
 }
 
 export interface AIScenePlannerResult {
@@ -145,28 +150,43 @@ function parseAIResponse(text: string): ParsedSceneData[] {
       throw new Error('scenes 배열을 찾을 수 없습니다.');
     }
 
-    // 각 씬 데이터 검증 및 정규화
+    // 각 씬 데이터 검증 및 정규화 (v3.0 - 새 필드 추가)
     return scenes.map((scene: Partial<ParsedSceneData>, index: number) => ({
       sceneNumber: scene.sceneNumber || index + 1,
       title: scene.title || `씬 ${index + 1}`,
-      targetWordCount: scene.targetWordCount || 10000,
+      targetWordCount: scene.targetWordCount || 2000, // 기본값 2000자로 하향
+      sceneType: validateSceneType(scene.sceneType),
       pov: scene.pov || '',
       povType: validatePovType(scene.povType),
       location: scene.location || '',
       timeframe: scene.timeframe || '',
       participants: Array.isArray(scene.participants) ? scene.participants : [],
       mustInclude: Array.isArray(scene.mustInclude) ? scene.mustInclude : [],
+      forbiddenInThisScene: Array.isArray(scene.forbiddenInThisScene) ? scene.forbiddenInThisScene : [],
       startCondition: scene.startCondition || '',
       startConditionType: validateConditionType(scene.startConditionType),
       endCondition: scene.endCondition || '',
       endConditionType: validateConditionType(scene.endConditionType),
       emotionalGoal: scene.emotionalGoal || '',
       plotFunction: scene.plotFunction || '',
+      connectionToPrevious: scene.connectionToPrevious || '',
+      connectionToNext: scene.connectionToNext || '',
+      notes: scene.notes || '',
     }));
   } catch (error) {
     console.error('JSON 파싱 오류:', error, 'Raw text:', text);
     throw new Error('AI 응답을 파싱할 수 없습니다.');
   }
+}
+
+/**
+ * 씬 타입 검증
+ */
+function validateSceneType(type?: string): 'mini' | 'normal' | 'important' | 'climax' {
+  if (type === 'mini' || type === 'normal' || type === 'important' || type === 'climax') {
+    return type;
+  }
+  return 'normal';
 }
 
 /**
@@ -190,7 +210,7 @@ function validateConditionType(type?: string): 'dialogue' | 'action' | 'narratio
 }
 
 /**
- * ParsedSceneData를 SceneStructure로 변환
+ * ParsedSceneData를 SceneStructure로 변환 (v3.0 - 새 필드 추가)
  */
 export function parsedSceneToStructure(
   data: ParsedSceneData,
@@ -202,15 +222,22 @@ export function parsedSceneToStructure(
     sceneNumber: data.sceneNumber,
     title: data.title,
     targetWordCount: data.targetWordCount,
+    sceneType: data.sceneType, // 씬 유형 추가
     pov: data.pov,
     povType: data.povType,
     location: data.location,
     timeframe: data.timeframe,
     participants: data.participants,
     mustInclude: data.mustInclude,
+    forbiddenInThisScene: data.forbiddenInThisScene, // 금지 키워드 추가
     startCondition: data.startCondition,
     endCondition: data.endCondition,
     endConditionType: data.endConditionType,
+    emotionalGoal: data.emotionalGoal, // 감정 목표 추가
+    plotFunction: data.plotFunction, // 플롯 기능 추가
+    connectionToPrevious: data.connectionToPrevious, // 이전 씬 연결 추가
+    connectionToNext: data.connectionToNext, // 다음 씬 연결 추가
+    notes: data.notes, // 메모 추가
     status: 'pending',
     actualWordCount: 0,
     createdAt: new Date(),
@@ -219,7 +246,7 @@ export function parsedSceneToStructure(
 }
 
 /**
- * 씬 연결 검증 (이전 씬 종료 → 다음 씬 시작)
+ * 씬 연결 검증 (이전 씬 종료 → 다음 씬 시작) - v3.0 강화
  */
 export function validateSceneConnections(scenes: ParsedSceneData[]): {
   isValid: boolean;
@@ -227,31 +254,67 @@ export function validateSceneConnections(scenes: ParsedSceneData[]): {
 } {
   const issues: { sceneNumber: number; issue: string }[] = [];
 
-  for (let i = 1; i < scenes.length; i++) {
-    const prevScene = scenes[i - 1];
+  for (let i = 0; i < scenes.length; i++) {
     const currentScene = scenes[i];
 
     // 시작 조건이 비어있는지 확인
     if (!currentScene.startCondition || currentScene.startCondition.trim().length < 10) {
       issues.push({
         sceneNumber: currentScene.sceneNumber,
-        issue: '시작 조건이 너무 짧습니다.',
+        issue: '시작 조건이 너무 짧습니다. (최소 10자 이상)',
       });
     }
 
-    // 종료 조건이 비어있는지 확인
-    if (!currentScene.endCondition || currentScene.endCondition.trim().length < 10) {
+    // 종료 조건이 비어있는지 확인 - 더 엄격하게
+    if (!currentScene.endCondition || currentScene.endCondition.trim().length < 15) {
       issues.push({
         sceneNumber: currentScene.sceneNumber,
-        issue: '종료 조건이 너무 짧습니다.',
+        issue: '종료 조건이 너무 짧습니다. (최소 15자 이상, 구체적으로)',
       });
     }
 
     // mustInclude가 비어있는지 확인
-    if (!currentScene.mustInclude || currentScene.mustInclude.length < 3) {
+    if (!currentScene.mustInclude || currentScene.mustInclude.length < 2) {
       issues.push({
         sceneNumber: currentScene.sceneNumber,
-        issue: 'mustInclude 항목이 3개 미만입니다.',
+        issue: 'mustInclude 항목이 2개 미만입니다.',
+      });
+    }
+
+    // forbiddenInThisScene이 다음 씬들의 키워드를 포함하는지 확인
+    if (i < scenes.length - 1) {
+      const nextScene = scenes[i + 1];
+      if (!currentScene.forbiddenInThisScene || currentScene.forbiddenInThisScene.length === 0) {
+        issues.push({
+          sceneNumber: currentScene.sceneNumber,
+          issue: 'forbiddenInThisScene이 비어있습니다. 다음 씬의 키워드를 넣어주세요.',
+        });
+      }
+    }
+
+    // 씬 타입에 따른 분량 검증
+    const wordCount = currentScene.targetWordCount;
+    const sceneType = currentScene.sceneType;
+
+    if (sceneType === 'mini' && wordCount > 1500) {
+      issues.push({
+        sceneNumber: currentScene.sceneNumber,
+        issue: `미니 씬인데 분량이 너무 많습니다. (${wordCount}자 → 800~1500자 권장)`,
+      });
+    } else if (sceneType === 'normal' && (wordCount < 1200 || wordCount > 2800)) {
+      issues.push({
+        sceneNumber: currentScene.sceneNumber,
+        issue: `일반 씬 분량이 범위를 벗어났습니다. (${wordCount}자 → 1500~2500자 권장)`,
+      });
+    } else if (sceneType === 'important' && (wordCount < 2000 || wordCount > 4000)) {
+      issues.push({
+        sceneNumber: currentScene.sceneNumber,
+        issue: `중요 씬 분량이 범위를 벗어났습니다. (${wordCount}자 → 2500~3500자 권장)`,
+      });
+    } else if (sceneType === 'climax' && wordCount < 3000) {
+      issues.push({
+        sceneNumber: currentScene.sceneNumber,
+        issue: `클라이맥스 씬인데 분량이 너무 적습니다. (${wordCount}자 → 3500~4500자 권장)`,
       });
     }
   }

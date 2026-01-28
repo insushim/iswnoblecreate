@@ -649,13 +649,14 @@ export interface VolumeStructure {
   updatedAt: Date;
 }
 
-// 씬 구조 - 분할 집필용
+// 씬 구조 - 분할 집필용 (v3.0 강화)
 export interface SceneStructure {
   id: string;
   volumeId: string;
   sceneNumber: number;
   title: string;
   targetWordCount: number;
+  sceneType?: 'mini' | 'normal' | 'important' | 'climax'; // v3.0: 씬 유형 추가
   pov: string; // 시점 인물
   povType: 'first' | 'third-limited' | 'omniscient';
   location: string;
@@ -663,21 +664,31 @@ export interface SceneStructure {
   participants: string[]; // 등장인물
 
   // 필수 포함 내용
-  mustInclude: string[]; // 반드시 포함할 내용 (3-5개)
+  mustInclude: string[]; // 반드시 포함할 내용 (3-5개, 구체적 대사/행동)
+
+  // 🔴 v3.0: 금지 키워드 (이 씬에서 쓰면 안 되는 것들 - 다음 씬 내용)
+  forbiddenInThisScene?: string[]; // 다음 씬에서 다룰 키워드/인물/장소
 
   // 시작/종료 조건
-  startCondition: string; // 이 씬의 시작 상황
-  endCondition: string; // ⚠️ 핵심: 이 씬의 종료 조건 (구체적 장면/대사)
+  startCondition: string; // 이 씬의 시작 상황 (구체적 대사/행동)
+  endCondition: string; // ⚠️ 핵심: 이 씬의 종료 조건 (구체적 대사/행동)
   endConditionType: 'dialogue' | 'action' | 'narration' | 'scene';
 
-  // 연결
+  // 🔴 v3.0: 감정/플롯 목표
+  emotionalGoal?: string; // 이 씬의 감정적 목표 (한 단어)
+  plotFunction?: string; // 이 씬이 플롯에서 하는 역할
+
+  // 연결 (v3.0 강화)
   previousSceneSummary?: string; // 직전 씬 요약 (이어쓰기용)
-  nextScenePreview?: string; // 다음 씬 예고 (참고용만)
+  nextScenePreview?: string; // 다음 씬 예고 (참고용만, 절대 쓰지 말 것)
+  connectionToPrevious?: string; // 이전 씬과 어떻게 연결되는지
+  connectionToNext?: string; // 다음 씬으로 어떻게 이어지는지
 
   // 상태
   status: 'pending' | 'in_progress' | 'completed' | 'needs_revision';
   actualWordCount: number;
   content?: string;
+  notes?: string; // 집필 시 주의사항
 
   createdAt: Date;
   updatedAt: Date;
