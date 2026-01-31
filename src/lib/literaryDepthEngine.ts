@@ -1,359 +1,869 @@
 /**
- * 문학적 깊이 엔진 (LiteraryDepthEngine) v1.0
- *
- * 세계 최고 수준의 문학 기법을 AI에 주입
- * - 은유/직유 생성 가이드
- * - 상징 체계 관리
- * - 극적 아이러니 설계
- * - 서브텍스트 레이어 구축
- * - 다층적 의미 구조
- * - 여백과 생략의 기법
- * - 시점 조작 기법
- * - 시간 조작 기법
+ * Literary Depth Engine v1.0
+ * Theme, Symbol, Metaphor, Foreshadowing system
  */
 
-// ============================================
-// 문학적 장치 타입 정의
-// ============================================
+import Anthropic from '@anthropic-ai/sdk';
 
-export interface SymbolSystem {
-  symbol: string;              // 상징 대상 (예: "비", "달", "칼")
-  surfaceMeaning: string;       // 표면적 의미
-  deepMeaning: string;          // 심층적 의미
-  characterConnection: string;  // 캐릭터와의 연관
-  evolution: string;            // 소설 진행에 따른 의미 변화
-  appearances: {
-    sceneNumber: number;
-    context: string;
-    meaningAtThisPoint: string;
-  }[];
+// Types
+export type ThemeType =
+  | 'identity' | 'love' | 'death' | 'power' | 'freedom' | 'justice'
+  | 'redemption' | 'betrayal' | 'sacrifice' | 'growth' | 'loss'
+  | 'family' | 'society' | 'nature' | 'time' | 'memory' | 'truth'
+  | 'illusion' | 'fate' | 'choice' | 'isolation' | 'connection'
+  | 'ambition' | 'morality' | 'faith' | 'doubt' | 'hope' | 'despair';
+
+export interface ThemeLayer {
+  primary: ThemeType;
+  secondary: ThemeType[];
+  thesis: string;
+  antithesis: string;
+  synthesis: string;
+  progression: Array<{
+    stage: string;
+    expression: string;
+    subtlety: 'overt' | 'implied' | 'subtle' | 'hidden';
+  }>;
 }
 
-export interface DramaticIrony {
-  id: string;
-  description: string;
-  whatReaderKnows: string;       // 독자가 아는 것
-  whatCharacterKnows: string;    // 캐릭터가 아는 것
-  tensionSource: string;         // 긴장의 원천
-  payoffScene: number;           // 해소되는 씬
-  intensityLevel: 1 | 2 | 3 | 4 | 5;
+export interface Symbol {
+  name: string;
+  meaning: string[];
+  firstAppearance: string;
+  recurrences: Array<{ context: string; evolution: string; }>;
+  finalMeaning: string;
 }
 
-export interface SubtextLayer {
-  surfaceAction: string;         // 표면적 행동
-  hiddenMeaning: string;         // 숨겨진 의미
-  characterAwareness: 'aware' | 'unaware' | 'partially-aware';
-  readerClue: string;            // 독자가 알아챌 단서
+export interface Motif {
+  name: string;
+  pattern: string;
+  instances: string[];
+  thematicConnection: string;
 }
 
-export type MetaphorType =
-  | 'visual'          // 시각적 은유
-  | 'kinesthetic'     // 운동감각 은유
-  | 'natural'         // 자연 은유
-  | 'structural'      // 구조적 은유 (소설 구조 자체가 은유)
-  | 'extended'        // 확장된 은유 (씬 전체에 걸친)
-  | 'dead-to-alive';  // 죽은 은유를 살리기
+export interface Metaphor {
+  surface: string;
+  depth: string;
+  context: string;
+  resonance: string;
+}
 
-// ============================================
-// 문학적 깊이 엔진 클래스
-// ============================================
+export interface Foreshadowing {
+  hint: string;
+  payoff: string;
+  subtlety: 'obvious' | 'moderate' | 'subtle' | 'hidden';
+  chapter: { setup: number; payoff: number; };
+}
+
+export interface ParallelStructure {
+  elements: string[];
+  pattern: string;
+  meaning: string;
+  contrast?: string;
+}
+
+export interface Irony {
+  type: 'dramatic' | 'situational' | 'verbal' | 'cosmic';
+  setup: string;
+  reveal: string;
+  effect: string;
+}
+
+export interface Subtext {
+  surface: string;
+  beneath: string;
+  technique: string;
+  readerRealization: string;
+}
+
+export interface LiteraryDepthAnalysis {
+  thematicDepth: number;
+  symbolicRichness: number;
+  subtextQuality: number;
+  structuralElegance: number;
+  overallArtistry: number;
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+}
+
+const THEME_EXPRESSIONS: Record<ThemeType, {
+  symbols: string[];
+  motifs: string[];
+  situations: string[];
+  questions: string[];
+}> = {
+  identity: {
+    symbols: ['mirror', 'mask', 'shadow', 'name', 'clothes', 'transformation'],
+    motifs: ['self-recognition', 'others gaze', 'role-playing', 'essence vs appearance'],
+    situations: ['identity crisis', 'self-discovery', 'persona collapse', 'true self confrontation'],
+    questions: ['Who am I?', 'Is who others see the real me?', 'Does essence change?']
+  },
+  love: {
+    symbols: ['flame', 'water', 'flower', 'bird', 'light', 'hand'],
+    motifs: ['sacrifice', 'waiting', 'growth', 'change', 'acceptance'],
+    situations: ['love begins', 'trial', 'misunderstanding', 'reconciliation', 'maturity'],
+    questions: ['Is love enough?', 'What is true love?', 'Does love change?']
+  },
+  death: {
+    symbols: ['crow', 'clock', 'sunset', 'winter', 'seed', 'butterfly'],
+    motifs: ['finiteness', 'legacy', 'memory', 'transformation', 'liberation'],
+    situations: ['facing death', 'loss', 'last words', 'mourning', 'acceptance'],
+    questions: ['What remains after death?', 'How to live?', 'What is meaningful death?']
+  },
+  power: {
+    symbols: ['crown', 'sword', 'heights', 'chains', 'fire', 'shadow'],
+    motifs: ['corruption', 'resistance', 'balance', 'responsibility', 'price'],
+    situations: ['gaining power', 'abuse', 'corruption', 'fall', 'recovery'],
+    questions: ['Does power corrupt?', 'What is legitimate power?', 'Does strength require responsibility?']
+  },
+  freedom: {
+    symbols: ['bird', 'wind', 'sea', 'sky', 'key', 'wings'],
+    motifs: ['oppression', 'liberation', 'choice', 'price', 'responsibility'],
+    situations: ['imprisonment', 'escape', 'crossroads', 'weight of freedom'],
+    questions: ['What is true freedom?', 'What is the price of freedom?', 'Freedom and responsibility?']
+  },
+  justice: {
+    symbols: ['scales', 'sword', 'blindfold', 'light', 'trial', 'evidence'],
+    motifs: ['pursuit of justice', 'revenge and forgiveness', 'law and morality', 'fairness'],
+    situations: ['injustice', 'trial', 'revenge', 'forgiveness', 'reconciliation'],
+    questions: ['What is justice?', 'Is revenge justice?', 'Is perfect justice possible?']
+  },
+  redemption: {
+    symbols: ['water', 'light', 'spring', 'dawn', 'phoenix', 'path'],
+    motifs: ['guilt', 'confession', 'atonement', 'forgiveness', 'rebirth'],
+    situations: ['past sins', 'chance for redemption', 'seeking forgiveness', 'self-forgiveness'],
+    questions: ['Can I be forgiven?', 'How to atone?', 'Can the past be erased?']
+  },
+  betrayal: {
+    symbols: ['snake', 'thorn', 'shadow', 'mirror', 'knife', 'poison'],
+    motifs: ['trust', 'suspicion', 'discovery', 'consequence', 'healing'],
+    situations: ['building trust', 'moment of betrayal', 'discovery', 'confrontation', 'aftermath'],
+    questions: ['Why betray?', 'Can recovery happen after betrayal?', 'Value of trust?']
+  },
+  sacrifice: {
+    symbols: ['flame', 'cross', 'blood', 'altar', 'seed', 'bridge'],
+    motifs: ['price', 'choice', 'love', 'duty', 'legacy'],
+    situations: ['dilemma', 'moment of sacrifice', 'result', 'meaning'],
+    questions: ['Value of sacrifice?', 'Sacrifice for whom?', 'Is sacrifice necessary?']
+  },
+  growth: {
+    symbols: ['seed', 'tree', 'ladder', 'path', 'river', 'seasons'],
+    motifs: ['trial', 'realization', 'change', 'maturity', 'acceptance'],
+    situations: ['facing challenge', 'failure', 'lesson', 'growth', 'reflection'],
+    questions: ['What is growth?', 'Can one grow without pain?', 'Standard of maturity?']
+  },
+  loss: {
+    symbols: ['empty space', 'shadow', 'photo', 'letter', 'autumn', 'ruins'],
+    motifs: ['absence', 'memory', 'mourning', 'acceptance', 'rebuilding'],
+    situations: ['moment of loss', 'denial', 'anger', 'acceptance', 'new beginning'],
+    questions: ['What do we learn from loss?', 'How do memories remain?', 'Is recovery possible?']
+  },
+  family: {
+    symbols: ['home', 'roots', 'blood', 'table', 'photo', 'legacy'],
+    motifs: ['bond', 'conflict', 'duty', 'love', 'liberation'],
+    situations: ['family conflict', 'secrets', 'reconciliation', 'separation', 'reunion'],
+    questions: ['What is family?', 'Blood vs chosen family?', 'Family duty?']
+  },
+  society: {
+    symbols: ['city', 'wall', 'crowd', 'mask', 'class', 'machine'],
+    motifs: ['belonging', 'alienation', 'norms', 'resistance', 'conformity'],
+    situations: ['entering society', 'conflict', 'conformity vs resistance', 'change'],
+    questions: ['Individual vs society?', 'What is normal?', 'Can society change?']
+  },
+  nature: {
+    symbols: ['forest', 'sea', 'mountain', 'animal', 'seasons', 'storm'],
+    motifs: ['cycle', 'balance', 'primitiveness', 'recovery', 'connection'],
+    situations: ['return to nature', 'disaster', 'harmony', 'destruction', 'regeneration'],
+    questions: ['Human-nature relationship?', 'Is nature enemy or ally?', 'Power of nature?']
+  },
+  time: {
+    symbols: ['clock', 'hourglass', 'river', 'seasons', 'aging', 'ruins'],
+    motifs: ['finiteness', 'change', 'memory', 'regret', 'present'],
+    situations: ['time awareness', 'regret', 'present focus', 'accepting mortality'],
+    questions: ['Is time linear?', 'Does the past change?', 'Value of present?']
+  },
+  memory: {
+    symbols: ['photo', 'scent', 'music', 'scar', 'keepsake', 'dream'],
+    motifs: ['memory and reality', 'forgetting', 'reconstruction', 'obsession', 'liberation'],
+    situations: ['reminiscence', 'distorted memory', 'confrontation', 'acceptance'],
+    questions: ['Is memory truth?', 'Is forgetting healing?', 'Identity without memory?']
+  },
+  truth: {
+    symbols: ['light', 'mirror', 'unmasking', 'eye', 'book', 'evidence'],
+    motifs: ['search', 'discovery', 'acceptance', 'consequence', 'change'],
+    situations: ['doubt', 'search', 'discovery', 'confrontation', 'acceptance'],
+    questions: ['Is absolute truth possible?', 'Price of truth?', 'Is truth always good?']
+  },
+  illusion: {
+    symbols: ['mirror', 'fog', 'dream', 'stage', 'magic', 'shadow'],
+    motifs: ['self-deception', 'maintaining illusion', 'facing reality', 'awakening'],
+    situations: ['life in illusion', 'cracks', 'collapse', 'accepting reality'],
+    questions: ['Are illusions necessary?', 'Is reality bearable?', 'Border between truth and illusion?']
+  },
+  fate: {
+    symbols: ['thread', 'star', 'path', 'wheel', 'prophecy', 'cards'],
+    motifs: ['fate vs free will', 'resistance', 'acceptance', 'transcendence'],
+    situations: ['fate recognition', 'resistance', 'frustration', 'acceptance/transcendence'],
+    questions: ['Does fate exist?', 'Is choice free?', 'Can fate change?']
+  },
+  choice: {
+    symbols: ['crossroads', 'door', 'hand', 'coin', 'contract', 'signature'],
+    motifs: ['dilemma', 'consequence', 'responsibility', 'regret', 'acceptance'],
+    situations: ['moment of choice', 'conflict', 'decision', 'facing consequence'],
+    questions: ['Best choice?', 'Criteria for choice?', 'Is not choosing also a choice?']
+  },
+  isolation: {
+    symbols: ['island', 'wall', 'prison', 'silence', 'darkness', 'void'],
+    motifs: ['isolation', 'inner exploration', 'longing', 'connection attempt', 'acceptance/escape'],
+    situations: ['isolation begins', 'inner confrontation', 'connection attempt', 'liberation/acceptance'],
+    questions: ['Is solitude necessary?', 'Is connection possible?', 'Does self exist alone?']
+  },
+  connection: {
+    symbols: ['bridge', 'hand', 'rope', 'light', 'door', 'language'],
+    motifs: ['meeting', 'understanding', 'conflict', 'reconciliation', 'bond'],
+    situations: ['first meeting', 'misunderstanding', 'communication attempt', 'connection', 'parting'],
+    questions: ['What is true connection?', 'Is understanding possible?', 'Price of connection?']
+  },
+  ambition: {
+    symbols: ['mountain', 'star', 'ladder', 'fire', 'crown', 'shadow'],
+    motifs: ['goal', 'sacrifice', 'corruption', 'achievement', 'emptiness'],
+    situations: ['dream begins', 'obstacles', 'compromise', 'achievement', 'reflection'],
+    questions: ['Price of ambition?', 'What is success?', 'Where to stop?']
+  },
+  morality: {
+    symbols: ['scales', 'light and dark', 'path', 'boundary', 'hand'],
+    motifs: ['good and evil', 'gray area', 'judgment', 'consequence', 'reflection'],
+    situations: ['moral dilemma', 'choice', 'consequence', 'reflection'],
+    questions: ['Is absolute good/evil possible?', 'Does end justify means?', 'Standard of morality?']
+  },
+  faith: {
+    symbols: ['light', 'star', 'flame', 'mountain', 'water', 'seed'],
+    motifs: ['belief', 'test', 'doubt', 'recovery', 'transcendence'],
+    situations: ['belief formation', 'test', 'doubt', 'recovery/loss'],
+    questions: ['What is faith?', 'Is faith blind?', 'Can one live without faith?']
+  },
+  doubt: {
+    symbols: ['shadow', 'fog', 'mirror', 'crack', 'question mark'],
+    motifs: ['certainty', 'crack', 'exploration', 'new understanding'],
+    situations: ['certainty', 'doubt begins', 'exploration', 'conclusion'],
+    questions: ['Is doubt destructive or constructive?', 'Is certainty possible?']
+  },
+  hope: {
+    symbols: ['dawn', 'seed', 'star', 'flame', 'spring', 'child'],
+    motifs: ['darkness', 'small light', 'growth', 'realization'],
+    situations: ['despair', 'sprout of hope', 'trial', 'hope maintained/realized'],
+    questions: ['Basis of hope?', 'Can one live without hope?', 'What is false hope?']
+  },
+  despair: {
+    symbols: ['abyss', 'winter', 'ruins', 'shadow', 'void', 'thorns'],
+    motifs: ['loss', 'meaninglessness', 'isolation', 'collapse', 'rebuilding attempt'],
+    situations: ['despair begins', 'abyss', 'bottom', 'finding light'],
+    questions: ['Is despair the end?', 'Where does meaning come from?', 'What do we learn from despair?']
+  }
+};
 
 export class LiteraryDepthEngine {
+  private client: Anthropic;
+
+  constructor() {
+    this.client = new Anthropic();
+  }
+
+  async designThemeLayer(
+    premise: string,
+    primaryTheme: ThemeType,
+    secondaryThemes: ThemeType[]
+  ): Promise<ThemeLayer> {
+    const themeData = THEME_EXPRESSIONS[primaryTheme];
+
+    const prompt = `You are a literary critic and author.
+
+Premise: ${premise}
+Theme: ${primaryTheme}
+Secondary themes: ${secondaryThemes.join(', ')}
+
+Theme expression tools:
+- Symbols: ${themeData.symbols.join(', ')}
+- Motifs: ${themeData.motifs.join(', ')}
+- Situations: ${themeData.situations.join(', ')}
+- Questions: ${themeData.questions.join(', ')}
+
+Design the theme layer for this work:
+
+1. Primary Theme: ${primaryTheme}
+2. Secondary Themes: list
+3. Thesis: initial proposition about theme (presented early)
+4. Antithesis: counter-proposition (challenged in middle)
+5. Synthesis: integration (insight reached at end)
+
+6. Progression (5-7 stages):
+- stage: name
+- expression: specific expression method
+- subtlety: overt/implied/subtle/hidden
+
+Themes should be revealed through story and characters, not explained directly.
+
+Respond in JSON.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return this.createDefaultThemeLayer(primaryTheme, secondaryThemes);
+  }
+
+  async createSymbolSystem(
+    themes: ThemeType[],
+    setting: string,
+    keyElements: string[]
+  ): Promise<Symbol[]> {
+    const relevantSymbols = themes.flatMap(t => THEME_EXPRESSIONS[t].symbols);
+
+    const prompt = `You are a symbolism expert.
+
+Themes: ${themes.join(', ')}
+Setting: ${setting}
+Key elements: ${keyElements.join(', ')}
+Reference symbols: ${relevantSymbols.join(', ')}
+
+Create a symbol system for this work (4-6 symbols):
+
+Each symbol:
+1. name: symbol name
+2. meaning: meanings (multi-layered, 3-5)
+3. firstAppearance: first appearance context
+4. recurrences: reappearances (3-5)
+   - context: appearance context
+   - evolution: meaning change
+5. finalMeaning: final meaning (integrated)
+
+Symbols should:
+- Blend naturally into the story
+- Deepen gradually in meaning
+- Allow multiple interpretations
+
+Respond as JSON array.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return [];
+  }
+
+  async designForeshadowingNetwork(
+    plotPoints: Array<{ chapter: number; event: string }>,
+    twists: string[]
+  ): Promise<Foreshadowing[]> {
+    const prompt = `You are a master of foreshadowing.
+
+Plot points:
+${plotPoints.map(p => `Chapter ${p.chapter}: ${p.event}`).join('\n')}
+
+Major twists/events:
+${twists.join('\n')}
+
+Design foreshadowing for each important event/twist:
+
+Each foreshadowing:
+1. hint: hint content (specific)
+2. payoff: connected event
+3. subtlety: obvious/moderate/subtle/hidden
+4. chapter:
+   - setup: chapter where hint appears
+   - payoff: chapter where resolved
+
+Principles:
+- Pass naturally on first read
+- "Aha!" moment on reread
+- Mix different subtlety levels
+- Mix red herrings with real foreshadowing
+
+Respond as JSON array.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return [];
+  }
+
+  async addSubtextLayer(
+    scene: string,
+    characterDynamics: string,
+    hiddenTensions: string[]
+  ): Promise<{ enhanced: string; subtexts: Subtext[]; }> {
+    const prompt = `You are a subtext expert.
+
+Scene:
+${scene}
+
+Character dynamics: ${characterDynamics}
+Hidden tensions: ${hiddenTensions.join(', ')}
+
+Add subtext layer to this scene:
+
+1. Enhanced: enhanced scene with subtext
+2. Subtexts: subtexts added
+- surface: surface meaning
+- beneath: hidden meaning
+- technique: technique used
+- readerRealization: when reader realizes
+
+Respond in JSON.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return { enhanced: scene, subtexts: [] };
+  }
+
+  async designIrony(
+    situation: string,
+    characters: string[],
+    readerKnowledge: string
+  ): Promise<Irony[]> {
+    const prompt = `You are a master of irony.
+
+Situation: ${situation}
+Characters: ${characters.join(', ')}
+What reader knows: ${readerKnowledge}
+
+Design irony for this situation (2-4):
+
+Types:
+1. dramatic: reader knows but character doesn't
+2. situational: expectation vs result mismatch
+3. verbal: words vs meaning mismatch
+4. cosmic: irony of fate
+
+Each:
+- type
+- setup
+- reveal
+- effect
+
+Respond as JSON array.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return [];
+  }
+
+  async designParallelStructures(
+    plotlines: string[],
+    characters: Array<{ name: string; arc: string }>
+  ): Promise<ParallelStructure[]> {
+    const prompt = `You are a structuralist literary expert.
+
+Plotlines:
+${plotlines.join('\n')}
+
+Character arcs:
+${characters.map(c => `${c.name}: ${c.arc}`).join('\n')}
+
+Design parallel structures:
+
+Types:
+1. Character arc parallel
+2. Situation parallel
+3. Image parallel
+4. Contrast parallel
+
+Each:
+- elements: parallel elements
+- pattern: pattern description
+- meaning: meaning/effect
+- contrast: (if any) contrast element
+
+Respond as JSON array.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return [];
+  }
+
+  async generateMetaphors(
+    theme: ThemeType,
+    context: string,
+    count: number = 5
+  ): Promise<Metaphor[]> {
+    const themeData = THEME_EXPRESSIONS[theme];
+
+    const prompt = `You are a master of metaphor.
+
+Theme: ${theme}
+Context: ${context}
+Reference symbols: ${themeData.symbols.join(', ')}
+
+Generate ${count} rich metaphors:
+
+Each:
+- surface: surface image
+- depth: deep meaning
+- context: usage context
+- resonance: why it resonates with reader
+
+Respond as JSON array.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return [];
+  }
+
+  async designMotifs(themes: ThemeType[], setting: string): Promise<Motif[]> {
+    const relevantMotifs = themes.flatMap(t => THEME_EXPRESSIONS[t].motifs);
+
+    const prompt = `You are a motif design expert.
+
+Themes: ${themes.join(', ')}
+Setting: ${setting}
+Reference motifs: ${relevantMotifs.join(', ')}
+
+Design motifs for this work (4-6):
+
+Each:
+- name: motif name
+- pattern: repetition pattern
+- instances: specific appearances (4-6)
+- thematicConnection: connection to theme
+
+Respond as JSON array.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return [];
+  }
+
+  async analyzeLiteraryDepth(
+    content: string,
+    intendedThemes: ThemeType[]
+  ): Promise<LiteraryDepthAnalysis> {
+    const prompt = `You are a strict literary critic.
+
+Text:
+${content.substring(0, 8000)}
+
+Intended themes: ${intendedThemes.join(', ')}
+
+Analyze literary depth:
+
+1. thematicDepth (0-100)
+2. symbolicRichness (0-100)
+3. subtextQuality (0-100)
+4. structuralElegance (0-100)
+5. overallArtistry (0-100)
+6. strengths
+7. weaknesses
+8. suggestions
+
+Judge strictly by bestseller + literary award standards.
+
+Respond in JSON.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return {
+      thematicDepth: 50,
+      symbolicRichness: 50,
+      subtextQuality: 50,
+      structuralElegance: 50,
+      overallArtistry: 50,
+      strengths: [],
+      weaknesses: ['Analysis failed'],
+      suggestions: []
+    };
+  }
+
+  async enhanceLiteraryDepth(
+    content: string,
+    themeLayer: ThemeLayer,
+    symbols: Symbol[]
+  ): Promise<string> {
+    const prompt = `You are an expert at adding literary depth.
+
+Original:
+${content}
+
+Theme layer:
+- Theme: ${themeLayer.primary}
+- Thesis: ${themeLayer.thesis}
+- Antithesis: ${themeLayer.antithesis}
+
+Symbol system:
+${symbols.map(s => `${s.name}: ${s.meaning.join(', ')}`).join('\n')}
+
+Add literary depth to the original:
+- Insert symbols naturally
+- Add subtext layer
+- Enhance metaphors and images
+- Add thematic resonance
+
+Express through images and actions, not direct explanation.
+Output only the modified text.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    return text || content;
+  }
+
+  private createDefaultThemeLayer(
+    primary: ThemeType,
+    secondary: ThemeType[]
+  ): ThemeLayer {
+    const themeData = THEME_EXPRESSIONS[primary];
+
+    return {
+      primary,
+      secondary,
+      thesis: themeData.questions[0] || `Exploration of ${primary}`,
+      antithesis: 'Challenge to this',
+      synthesis: 'Integrated understanding',
+      progression: [
+        { stage: 'introduction', expression: 'Theme presented', subtlety: 'implied' },
+        { stage: 'development', expression: 'Theme explored', subtlety: 'subtle' },
+        { stage: 'conflict', expression: 'Theme challenged', subtlety: 'overt' },
+        { stage: 'climax', expression: 'Theme confronted', subtlety: 'overt' },
+        { stage: 'resolution', expression: 'Theme integrated', subtlety: 'implied' }
+      ]
+    };
+  }
+
+  getThemeExpressions(theme: ThemeType): typeof THEME_EXPRESSIONS[ThemeType] {
+    return THEME_EXPRESSIONS[theme];
+  }
+
+  getAvailableThemes(): ThemeType[] {
+    return Object.keys(THEME_EXPRESSIONS) as ThemeType[];
+  }
 
   /**
-   * 마스터 문학 기법 가이드 생성
-   * 씬 작성 프롬프트에 포함
+   * Generate master literary guide for a scene
    */
-  generateMasterLiteraryGuide(sceneContext: {
+  generateMasterLiteraryGuide(options: {
     sceneNumber: number;
     sceneType: string;
     emotionalGoal: string;
     participants: string[];
-    themes?: string[];
+    themes: string[];
   }): string {
-    let guide = `
----
-## 문학적 깊이 마스터 가이드 (세계 최고 수준)
+    const themeGuides = options.themes.map(theme => {
+      const themeKey = theme as ThemeType;
+      const themeData = THEME_EXPRESSIONS[themeKey];
+      if (!themeData) return '';
+      return `
+### ${theme} Theme Guide
+- Symbols: ${themeData.symbols.slice(0, 3).join(', ')}
+- Motifs: ${themeData.motifs.slice(0, 3).join(', ')}
+- Core Question: ${themeData.questions[0] || 'Explore this theme deeply'}`;
+    }).filter(Boolean).join('\n');
 
-`;
-
-    guide += this.generateMetaphorGuide(sceneContext.sceneType);
-    guide += this.generateSymbolismGuide();
-    guide += this.generateSubtextGuide(sceneContext.emotionalGoal);
-    guide += this.generateIronyGuide(sceneContext.sceneType);
-    guide += this.generateNarrativeDistanceGuide(sceneContext.sceneType);
-    guide += this.generateTemporalTechniqueGuide(sceneContext.sceneType);
-    guide += this.generateSilenceAndOmissionGuide();
-    guide += this.generateMultiLayerMeaningGuide(sceneContext.themes);
-    guide += this.generateMasterWriterTechniques();
-
-    return guide;
-  }
-
-  // ============================================
-  // 개별 기법 가이드
-  // ============================================
-
-  private generateMetaphorGuide(sceneType: string): string {
     return `
-### 은유/비유 기법 (씬당 최소 3개)
+## Literary Depth Guide - Scene ${options.sceneNumber}
 
-#### 은유 품질 기준
-- **1급 (최고)**: 두 영역의 예상치 못한 연결. 읽는 순간 "아!" 하는 깨달음
-  * "그의 침묵은 상처 위의 딱지 같았다. 건드리면 다시 피가 날 것이다."
-  * "대화가 얼음 위를 걷는 것 같았다. 한 발짝마다 갈라지는 소리가 났다."
+### Scene Context
+- Type: ${options.sceneType}
+- Emotional Goal: ${options.emotionalGoal}
+- Participants: ${options.participants.join(', ') || 'TBD'}
 
-- **2급 (좋음)**: 감각적이고 구체적. 추상적 개념을 신체적으로 표현
-  * "죄책감이 어깨를 짓눌렀다"보다 → "어깨에 보이지 않는 돌이 얹혀 있었다. 걸을 때마다 무게가 늘었다."
+${themeGuides || '### No specific theme assigned'}
 
-- **금지 (진부한 은유)**:
-  * "불같은 분노", "얼음처럼 차가운", "바다 같은 마음"
-  * "어둠이 내려앉았다", "빛이 되어주다", "길을 잃었다"
-  → 이미 닳은 은유. 독창적 연결을 만드세요.
+### Writing Techniques
+1. Show, don't tell - Express theme through actions and images
+2. Use sensory details to ground abstract concepts
+3. Layer subtext beneath surface dialogue
+4. Plant symbols naturally within the scene
+5. Build toward emotional resonance
 
-#### 씬 타입별 은유 전략
-${sceneType === 'climax' ? `- 클라이맥스: 강렬하고 짧은 은유. 신체적/운동감각적 은유 우선
-  * "세상이 기울었다." "공기가 유리처럼 깨졌다."` :
-      sceneType === 'important' ? `- 중요 씬: 확장된 은유 사용 가능. 하나의 은유를 씬 전체에 걸쳐 발전시키기
-  * 예: "대화가 바둑 같았다" → 씬 내내 바둑 관련 어휘로 상황 묘사` :
-        `- 일반 씬: 자연스럽게 녹아드는 일상적 은유. 과하지 않게.
-  * 환경 묘사에 감정을 투영하는 방식 추천`}
-
-#### 한국어 특화 은유 기법
-- 한국 자연/계절을 활용한 은유 (사계절, 달, 바람, 물)
-- 한국 전통 이미지 활용 (봇물, 서리, 안개, 산그림자)
-- 소리의 은유: 한국어 의성어/의태어를 은유적으로 확장
-  * "마음이 사각사각했다" "침묵이 똑똑 떨어졌다"
+### Quality Markers
+- Avoid direct exposition of theme
+- Create memorable images
+- Balance action with reflection
+- Connect to broader narrative threads
 `;
   }
 
-  private generateSymbolismGuide(): string {
-    return `
-### 상징 체계 운영
+  /**
+   * Evaluate overall literary depth of content
+   */
+  async evaluateLiteraryDepth(content: string): Promise<{
+    overallDepth: number;
+    thematicDepth: number;
+    symbolicRichness: number;
+    subtextQuality: number;
+    strengths: string[];
+    weaknesses: string[];
+  }> {
+    const prompt = `You are a literary critic evaluating depth.
 
-#### 상징 운영 원칙
-1. **핵심 상징 3개 이하**: 과다하면 의미가 흐려짐
-2. **진화하는 상징**: 같은 상징이 씬마다 다른 의미를 가지도록
-   * 예: "칼" → 초반: 권력 → 중반: 폭력의 공포 → 후반: 선택/결단
-3. **패서틱 팰러시**: 환경이 감정을 반영
-   * 슬픈 장면 → 비 (너무 직접적) 대신 → 안개, 회색 하늘, 지는 꽃
-   * 긴장 장면 → 폭풍 대신 → 불길한 고요, 이상한 동물 행동
-4. **대비 상징**: 반대 의미의 상징을 나란히 배치
-   * 빛과 어둠, 물과 불, 새장과 창
+Content:
+${content.substring(0, 6000)}
 
-#### 자연 상징 활용
-| 자연 요소 | 가능한 의미 |
-|-----------|-------------|
-| 물/강 | 시간의 흐름, 정화, 경계, 변화 |
-| 불/화염 | 열정, 파괴, 정화, 분노 |
-| 바람 | 변화, 자유, 불안정, 소식 |
-| 달 | 변화(차고 기울기), 은밀함, 여성성 |
-| 산 | 도전, 고독, 시련, 시야 |
-| 새 | 자유, 영혼, 소식, 탈출 |
-| 안개 | 불확실성, 은폐, 전환기 |
-`;
-  }
+Evaluate:
+1. overallDepth (0-100)
+2. thematicDepth (0-100)
+3. symbolicRichness (0-100)
+4. subtextQuality (0-100)
+5. strengths (list)
+6. weaknesses (list)
 
-  private generateSubtextGuide(emotionalGoal: string): string {
-    return `
-### 서브텍스트 (말과 의미의 불일치)
+Respond in JSON.`;
 
-#### 서브텍스트 원칙
-"좋은 소설에서 캐릭터는 절대 자기 감정을 직접 말하지 않는다"
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
+    });
 
-1. **대화의 빙산**: 대사의 10%만 드러나고 90%는 물 아래
-   * "밥 먹었어?" → 실제 의미: "네가 걱정돼", "우리 사이 괜찮아?"
-   * "바쁘다" → 실제 의미: "만나고 싶지 않아", "감당할 수 없어"
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
-2. **행동과 대사의 모순** (가장 강력한 기법)
-   * 입으로: "괜찮아" + 손은: 테이블 모서리를 꽉 쥐고 있다
-   * 입으로: "너 없이도 잘 살아" + 눈은: 상대방의 빈 자리를 바라본다
-   * 입으로: "상관없어" + 몸은: 한 발짝 물러선다
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    } catch { /* parse failed */ }
 
-3. **대화 속 진짜 싸움**: 표면 주제 ≠ 진짜 주제
-   * 표면: 저녁 메뉴를 정하는 대화
-   * 진짜: 관계에서 누가 결정권을 가지는지에 대한 권력 싸움
-
-4. **침묵의 서브텍스트**: 말하지 않는 것이 말하는 것보다 중요
-   * "그는 아무 말도 하지 않았다. 다만 창밖을 바라보았다."
-   * 답하지 않는 것 자체가 답
-
-#### 현재 씬 적용: "${emotionalGoal}"
-- 이 감정을 **절대 직접 말하지 마세요**
-- 행동, 시선, 호흡, 손동작, 말투 변화로만 표현하세요
-- 대화에서 다른 주제를 이야기하면서 이 감정이 스며나오도록 하세요
-`;
-  }
-
-  private generateIronyGuide(sceneType: string): string {
-    return `
-### 아이러니 기법
-
-#### 극적 아이러니 (독자 > 캐릭터)
-독자는 알지만 캐릭터는 모르는 정보를 활용:
-- 캐릭터가 "안전하다"고 믿는 순간, 독자는 위험을 알고 있음
-- 캐릭터가 신뢰하는 사람이 배신자임을 독자만 알고 있음
-- **효과**: 긴장감, 안타까움, 독자의 감정적 투자 증가
-
-#### 상황적 아이러니 (기대와 결과의 불일치)
-- 보호하려던 행동이 오히려 해를 끼침
-- 피하려던 것이 정확히 현실이 됨
-- 가장 약한 존재가 가장 결정적인 역할을 함
-
-#### 언어적 아이러니 (반어법)
-- 절대 과하지 않게. 한국어 문맥에서 자연스러운 수준으로.
-- "참 잘됐군." (실제로는 최악의 상황에서)
-
-${sceneType === 'climax'
-      ? '#### 이 클라이맥스 씬: 극적 아이러니가 해소되는 순간을 만드세요.\n캐릭터가 마침내 독자가 알던 진실을 깨닫는 순간의 충격을 극대화하세요.'
-      : '#### 이 씬: 극적 아이러니를 유지하거나 심화시키세요.\n독자가 캐릭터의 무지에 안타까워하거나 긴장하도록.'}
-`;
-  }
-
-  private generateNarrativeDistanceGuide(sceneType: string): string {
-    return `
-### 서술 거리 조절 (카메라 기법)
-
-서술의 "카메라"를 의도적으로 조절하세요:
-
-#### 클로즈업 (가장 가까운 거리)
-- 내면 독백, 감각의 디테일, 미세한 표정 변화
-- 사용 시점: 감정적 절정, 중요한 깨달음, 친밀한 순간
-- "그의 눈동자에 비친 자신의 얼굴이 일그러져 있었다."
-
-#### 미디엄 샷 (중간 거리)
-- 대화와 행동, 공간과 인물의 관계
-- 사용 시점: 대부분의 씬, 대화 장면
-- "두 사람은 마주 앉았다. 테이블 위의 찻잔에서 김이 올랐다."
-
-#### 롱 샷 (먼 거리)
-- 풍경, 전체 상황, 시간의 흐름
-- 사용 시점: 씬 오프닝, 시간 경과, 규모감 표현
-- "성벽 위에 선 작은 인영이 보였다. 저 아래로 만 명의 군사가 펼쳐져 있었다."
-
-#### ${sceneType === 'climax' ? '클라이맥스: 클로즈업과 롱 샷을 급격히 교차하세요. 내면의 감정과 외부의 거대한 상황을 번갈아 보여주는 것이 가장 강렬합니다.' :
-      sceneType === 'important' ? '중요 씬: 미디엄에서 시작하여 핵심 순간에 클로즈업으로 전환하세요.' :
-        '일반 씬: 롱 샷으로 공간을 잡고 미디엄으로 전환하세요.'}
-`;
-  }
-
-  private generateTemporalTechniqueGuide(sceneType: string): string {
-    return `
-### 시간 조작 기법
-
-#### 1. 슬로우 모션 (시간 늘리기)
-결정적 순간을 초 단위로 늘려서 묘사:
-- 일반 속도: "칼이 날아왔고 그가 피했다"
-- 슬로우모션: "칼날이 번뜩였다. 공기가 갈라지는 소리가 들렸다. 그의 눈에 자신의 얼굴이 비쳤다. 몸이 반응했다. 근육이 수축하고, 무릎이 꺾이고, 세상이 기울었다. 칼날이 머리카락 한 올을 베며 지나갔다."
-- **사용 시점**: 전투, 사고, 깨달음의 순간
-
-#### 2. 타임 스킵 (시간 건너뛰기)
-중요하지 않은 시간을 우아하게 건너뛰기:
-- "사흘이 지났다." → 너무 직접적
-- "셋째 날 아침, 그의 수염이 거칠어져 있었다." → 신체 변화로 시간 경과 표현
-- "눈이 내리고, 녹고, 또 내렸다." → 반복으로 시간 경과
-
-#### 3. 플래시백/플래시포워드
-- 플래시백: 현재 감각이 과거 기억을 촉발하도록 (냄새, 소리, 촉감)
-  * ❌ "그때가 떠올랐다. 10년 전..."
-  * ✅ "낡은 나무 냄새가 코끝을 스쳤다. 손끝에 남아 있던 감촉—" (자연스럽게 과거로)
-- 플래시포워드: 극히 드물게, 불길한 예감으로만
-
-#### 4. 반복 (시간의 원환)
-- 비슷한 상황이 다른 맥락에서 반복되어 의미가 변화
-- 처음에는 평범했던 행동이 나중에는 전혀 다른 의미를 가지도록
-`;
-  }
-
-  private generateSilenceAndOmissionGuide(): string {
-    return `
-### 여백과 생략의 기법 (빙산 이론)
-
-"헤밍웨이의 빙산 이론: 보이는 것은 1/8, 나머지 7/8은 물 아래에 있어야 한다"
-
-#### 1. 전략적 생략
-- 모든 것을 설명하지 마세요. 독자가 채울 공간을 남기세요.
-- 가장 강렬한 순간은 직접 묘사하지 않고 전후만 보여주기
-  * 전투의 결과: 전투 장면 대신 전투 후의 정적과 상처
-  * 고백: 말하는 순간 대신 말한 후의 침묵
-  * 죽음: 죽는 순간 대신 빈 방, 남겨진 물건
-
-#### 2. 행간 (줄 사이의 의미)
-- 문단 사이의 빈 줄 = 시간/감정의 간격
-- 짧은 문단 = 여운, 강조, 전환
-- 대사 후 묘사 없이 다음 대사 = 팽팽한 긴장
-
-#### 3. 엔딩의 여백
-- 모든 것을 해결하지 마세요
-- 독자가 마지막 페이지를 넘긴 후에도 생각하도록
-- 열린 결말의 힘: 답 대신 더 깊은 질문을 남기세요
-`;
-  }
-
-  private generateMultiLayerMeaningGuide(themes?: string[]): string {
-    return `
-### 다층적 의미 구조
-
-#### 3개 층위로 쓰기
-모든 씬은 최소 3개 층위의 의미를 가져야 합니다:
-
-1. **표면 층 (Plot)**: 무슨 일이 일어나는가
-   - 누가 무엇을 하고, 무슨 말을 하는가
-   - 독자 100%가 이해
-
-2. **감정 층 (Character)**: 캐릭터가 진짜 느끼는 것
-   - 행동과 대사 아래의 진짜 감정
-   - 서브텍스트를 읽는 독자 70%가 이해
-
-3. **주제 층 (Theme)**: 이 씬이 말하려는 더 큰 이야기
-   - 인간, 사회, 존재에 대한 보편적 진실
-   - 깊이 읽는 독자 30%가 이해
-${themes && themes.length > 0 ? `\n   - 현재 주제: ${themes.join(', ')}` : ''}
-
-#### 예시
-> 표면: 두 사람이 바둑을 둔다
-> 감정: 아버지가 아들에게 자신의 방식을 가르치려 하지만, 아들은 자신만의 길을 가고 싶다
-> 주제: 전통과 혁신의 갈등, 세대 간의 단절과 연결
-
-**모든 씬에서 이 3층위를 의식하며 쓰세요.**
-`;
-  }
-
-  private generateMasterWriterTechniques(): string {
-    return `
-### 거장 작가들의 핵심 기법
-
-#### 1. 안톤 체호프 - "보여주기의 달인"
-- 감정을 환경/사물로 표현
-- "한 번도 등장인물의 감정을 설명하지 않았다. 다만 그들의 행동을 보여주었다."
-- 기법: 사소한 디테일에 거대한 감정을 담기
-
-#### 2. 어니스트 헤밍웨이 - "빙산 이론"
-- 문장을 최대한 간결하게
-- 생략이 말보다 강하다
-- 기법: 가장 중요한 것을 말하지 않기
-
-#### 3. 가브리엘 가르시아 마르케스 - "마술적 리얼리즘"
-- 경이로운 것을 당연하게 서술
-- 일상적인 것을 경이롭게 서술
-- 기법: 톤의 반전 (심각한 상황을 담담하게, 사소한 것을 극적으로)
-
-#### 4. 무라카미 하루키 - "일상과 비일상의 경계"
-- 구체적인 고유명사/브랜드명 사용으로 현실감
-- 비유에 일상적 이미지 사용 (직접적이지만 신선한)
-- 기법: 초현실적 요소를 자연스러운 문체로
-
-#### 5. 이문열/박경리 - "한국 문학의 정수"
-- 계절감과 자연의 변화로 시간과 감정 표현
-- 인물의 내면을 행동/관계의 변화로 보여주기
-- 한국어 고유의 리듬감 활용 (3-4음절 리듬, 대구, 점층)
-- 기법: 한국적 정서(한, 정, 흥)를 보편적 감정으로 승화
-
-#### 적용 원칙
-- 위 거장들의 기법을 **의식적으로** 1씬에 2개 이상 적용하세요
-- 단, 기법이 드러나면 실패. 자연스러워야 합니다.
-- "좋은 글쓰기는 보이지 않는 글쓰기다"
-`;
+    return {
+      overallDepth: 50,
+      thematicDepth: 50,
+      symbolicRichness: 50,
+      subtextQuality: 50,
+      strengths: [],
+      weaknesses: []
+    };
   }
 }
 
