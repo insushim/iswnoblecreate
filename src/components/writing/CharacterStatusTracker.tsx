@@ -199,6 +199,7 @@ export function CharacterStatusTracker({
     }
 
     return detectedChanges;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characters, characterStatuses, currentSceneId]);
 
   // 현재 내용에서 캐릭터 언급 감지 및 일관성 검증

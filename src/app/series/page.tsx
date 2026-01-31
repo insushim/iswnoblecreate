@@ -44,7 +44,7 @@ export default function SeriesPage() {
   useEffect(() => {
     loadSeries();
     fetchProjects();
-  }, []);
+  }, [fetchProjects]);
 
   const loadSeries = async () => {
     setIsLoading(true);
