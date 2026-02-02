@@ -1,391 +1,650 @@
 /**
- * 복선/떡밥 관리 시스템 (ForeshadowingTracker)
- *
- * 상업 출판 수준의 플롯 관리
- * - 복선(떡밥) 설치 및 회수 추적
- * - 미스터리/서스펜스 요소 관리
- * - 씬 간 인과관계 검증
- * - 체호프의 총 원칙 적용
- * - 반복 모티프 관리
+ * Foreshadowing Tracker - Manages plot foreshadowing elements
+ * Plant -> Water -> Payoff lifecycle
+ * Chekhov's Gun validation
  */
 
-// ============================================
-// 복선/떡밥 타입 정의
-// ============================================
-
-export interface Foreshadowing {
-  id: string;
-  type: ForeshadowingType;
-  priority: 'critical' | 'major' | 'minor' | 'subtle';
-
-  // 설치 정보
-  plantedInScene: number;         // 설치된 씬 번호
-  plantedInVolume: number;        // 설치된 권 번호
-  plantDescription: string;       // 설치 설명
-  plantMethod: PlantMethod;       // 설치 방법
-
-  // 회수 정보
-  payoffTargetScene?: number;     // 회수 예정 씬
-  payoffTargetVolume?: number;    // 회수 예정 권
-  payoffDescription?: string;     // 회수 방법 설명
-  payoffMethod?: PayoffMethod;    // 회수 방법
-  actualPayoffScene?: number;     // 실제 회수된 씬
-  actualPayoffVolume?: number;    // 실제 회수된 권
-
-  // 중간 강화
-  reinforcements: {
-    sceneNumber: number;
-    volumeNumber: number;
-    description: string;
-    method: 'reminder' | 'escalation' | 'misdirection' | 'parallel';
-  }[];
-
-  // 상태
-  status: 'planted' | 'reinforced' | 'partially-resolved' | 'resolved' | 'abandoned';
-
-  // 메타데이터
-  relatedCharacters: string[];
-  keywords: string[];             // 관련 키워드 (검색/매칭용)
-  notes?: string;
-}
-
 export type ForeshadowingType =
-  | 'chekhov-gun'      // 체호프의 총 (사물/도구가 나중에 사용됨)
-  | 'prophecy'         // 예언/암시 (미래 사건 암시)
-  | 'character-trait'  // 캐릭터 특성 (나중에 중요해질 특성)
-  | 'mystery'          // 미스터리 (풀어야 할 수수께끼)
-  | 'relationship'     // 관계 복선 (인물 관계 변화 암시)
-  | 'symbol'           // 상징 (반복되는 상징/이미지)
-  | 'backstory'        // 배경 이야기 (점진적 공개)
-  | 'red-herring'      // 레드 헤링 (의도적 오도)
-  | 'motif'            // 모티프 (반복 주제/이미지)
-  | 'dramatic-irony'   // 극적 아이러니 (독자만 아는 정보)
-  | 'setup-payoff';    // 셋업-페이오프 (설정과 회수)
+  | 'chekhov-gun'
+  | 'character-hint'
+  | 'plot-seed'
+  | 'symbol'
+  | 'prophecy'
+  | 'red-herring'
+  | 'callback'
+  | 'thematic'
+  | 'mystery-clue';
 
-export type PlantMethod =
-  | 'dialogue'         // 대화 속에 자연스럽게
-  | 'description'      // 묘사 속에 숨겨서
-  | 'action'           // 행동/사건으로
-  | 'internal-thought' // 내면 독백으로
-  | 'environmental'    // 환경/배경으로
-  | 'symbolic';        // 상징적 이미지로
+export type ForeshadowingStatus =
+  | 'planted'
+  | 'watered'
+  | 'payoff-ready'
+  | 'paid-off'
+  | 'abandoned'
+  | 'forgotten';
 
-export type PayoffMethod =
-  | 'revelation'       // 밝혀짐/공개
-  | 'confrontation'    // 대면/직면
-  | 'consequence'      // 결과 발생
-  | 'callback'         // 콜백/재등장
-  | 'twist'            // 반전
-  | 'resolution';      // 해결
+export interface ForeshadowingMention {
+  chapterId: string;
+  sceneId: string;
+  chapterNumber: number;
+  sceneOrder: number;
+  mentionType: 'plant' | 'water' | 'payoff';
+  context: string;
+  subtlety: number;
+  createdAt: Date;
+}
 
-// ============================================
-// 인과관계 체인
-// ============================================
-
-export interface CausalChain {
+export interface ForeshadowingPlan {
   id: string;
-  name: string;
+  projectId: string;
+  title: string;
   description: string;
+  type: ForeshadowingType;
+  status: ForeshadowingStatus;
+  importance: 'critical' | 'major' | 'minor' | 'easter-egg';
 
-  links: CausalLink[];
-  status: 'active' | 'completed' | 'broken';
-}
-
-export interface CausalLink {
-  cause: {
-    sceneNumber: number;
-    volumeNumber: number;
-    event: string;
-  };
-  effect: {
-    sceneNumber: number;
-    volumeNumber: number;
-    event: string;
-  };
-  type: 'direct' | 'indirect' | 'delayed' | 'chain';
-  verified: boolean;
-}
-
-// ============================================
-// 모티프/상징 관리
-// ============================================
-
-export interface RecurringMotif {
-  id: string;
-  name: string;
-  symbol: string;           // 상징 이미지
-  meaning: string;          // 의미
-  firstAppearance: number;  // 첫 등장 씬
-  appearances: {
-    sceneNumber: number;
-    volumeNumber: number;
+  plantPlan: {
+    targetChapter: number;
+    method: string;
+    subtlety: number;
     context: string;
-    variation: string;       // 변형/발전
-  }[];
-  evolution: string;         // 모티프의 변화/발전 방향
-  targetFrequency: number;   // 목표 등장 빈도 (씬 단위)
+  };
+
+  waterPlans: Array<{
+    targetChapter: number;
+    method: string;
+    subtlety: number;
+  }>;
+
+  payoffPlan: {
+    targetChapter: number;
+    method: string;
+    impact: 'shocking' | 'satisfying' | 'emotional' | 'humorous';
+    buildup: string;
+  };
+
+  mentions: ForeshadowingMention[];
+  relatedCharacters: string[];
+  relatedLocations: string[];
+  relatedItems: string[];
+  connectedForeshadowings: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  notes: string;
 }
 
-// ============================================
-// 복선 추적기 클래스
-// ============================================
+export interface ForeshadowingStats {
+  total: number;
+  planted: number;
+  watered: number;
+  paidOff: number;
+  forgotten: number;
+  redHerrings: number;
+  chekhovViolations: string[];
+}
+
+export interface ForeshadowingIssue {
+  type: 'chekhov-violation' | 'orphan-payoff' | 'too-obvious' | 'forgotten' | 'overcrowded';
+  severity: 'critical' | 'warning' | 'info';
+  foreshadowingId: string;
+  message: string;
+  suggestion: string;
+}
 
 export class ForeshadowingTracker {
-  private foreshadowings: Map<string, Foreshadowing> = new Map();
-  private causalChains: Map<string, CausalChain> = new Map();
-  private motifs: Map<string, RecurringMotif> = new Map();
-  private currentVolume: number = 1;
-  private currentScene: number = 1;
+  private foreshadowings: Map<string, ForeshadowingPlan> = new Map();
+  private projectId: string;
 
-  constructor(volume?: number, scene?: number) {
-    if (volume) this.currentVolume = volume;
-    if (scene) this.currentScene = scene;
+  constructor(projectId: string) {
+    this.projectId = projectId;
   }
 
-  /**
-   * 복선 추가
-   */
-  addForeshadowing(foreshadowing: Foreshadowing): void {
-    this.foreshadowings.set(foreshadowing.id, foreshadowing);
-  }
-
-  /**
-   * 복선 상태 업데이트
-   */
-  updateForeshadowingStatus(id: string, status: Foreshadowing['status'], details?: Partial<Foreshadowing>): void {
-    const f = this.foreshadowings.get(id);
-    if (f) {
-      f.status = status;
-      if (details) {
-        Object.assign(f, details);
-      }
+  loadForeshadowings(plans: ForeshadowingPlan[]): void {
+    this.foreshadowings.clear();
+    for (const plan of plans) {
+      this.foreshadowings.set(plan.id, plan);
     }
   }
 
-  /**
-   * 모티프 추가
-   */
-  addMotif(motif: RecurringMotif): void {
-    this.motifs.set(motif.id, motif);
+  createForeshadowing(
+    plan: Omit<ForeshadowingPlan, 'id' | 'createdAt' | 'updatedAt' | 'mentions'>
+  ): ForeshadowingPlan {
+    const now = new Date();
+    const newPlan: ForeshadowingPlan = {
+      ...plan,
+      id: crypto.randomUUID(),
+      mentions: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.foreshadowings.set(newPlan.id, newPlan);
+    return newPlan;
   }
 
-  /**
-   * 인과관계 체인 추가
-   */
-  addCausalChain(chain: CausalChain): void {
-    this.causalChains.set(chain.id, chain);
+  recordPlant(
+    foreshadowingId: string,
+    chapterId: string,
+    sceneId: string,
+    chapterNumber: number,
+    sceneOrder: number,
+    context: string,
+    subtlety: number
+  ): ForeshadowingPlan | null {
+    const plan = this.foreshadowings.get(foreshadowingId);
+    if (!plan) return null;
+
+    const mention: ForeshadowingMention = {
+      chapterId,
+      sceneId,
+      chapterNumber,
+      sceneOrder,
+      mentionType: 'plant',
+      context,
+      subtlety,
+      createdAt: new Date(),
+    };
+
+    plan.mentions.push(mention);
+    plan.status = 'planted';
+    plan.updatedAt = new Date();
+    return plan;
   }
 
-  /**
-   * 현재 씬에서 사용해야 할 복선 정보 생성
-   */
-  generateSceneForeshadowingGuide(sceneNumber: number, volumeNumber: number): string {
-    this.currentScene = sceneNumber;
-    this.currentVolume = volumeNumber;
+  recordWater(
+    foreshadowingId: string,
+    chapterId: string,
+    sceneId: string,
+    chapterNumber: number,
+    sceneOrder: number,
+    context: string,
+    subtlety: number
+  ): ForeshadowingPlan | null {
+    const plan = this.foreshadowings.get(foreshadowingId);
+    if (!plan) return null;
 
-    const toPlant = this.getForeshadowingsToPlant(sceneNumber, volumeNumber);
-    const toReinforce = this.getForeshadowingsToReinforce(sceneNumber, volumeNumber);
-    const toResolve = this.getForeshadowingsToResolve(sceneNumber, volumeNumber);
-    const activeMotifs = this.getActiveMotifs(sceneNumber, volumeNumber);
-    const unresolvedWarnings = this.getUnresolvedWarnings(sceneNumber, volumeNumber);
+    const mention: ForeshadowingMention = {
+      chapterId,
+      sceneId,
+      chapterNumber,
+      sceneOrder,
+      mentionType: 'water',
+      context,
+      subtlety,
+      createdAt: new Date(),
+    };
 
-    let guide = `
-## 🧵 복선/떡밥 관리 지침
+    plan.mentions.push(mention);
+    plan.status = 'watered';
+    plan.updatedAt = new Date();
+    return plan;
+  }
 
-`;
+  recordPayoff(
+    foreshadowingId: string,
+    chapterId: string,
+    sceneId: string,
+    chapterNumber: number,
+    sceneOrder: number,
+    context: string
+  ): ForeshadowingPlan | null {
+    const plan = this.foreshadowings.get(foreshadowingId);
+    if (!plan) return null;
 
-    // 이번 씬에서 설치할 복선
-    if (toPlant.length > 0) {
-      guide += `### 🌱 이번 씬에서 설치할 복선\n`;
-      for (const f of toPlant) {
-        guide += `
-**[${this.getPriorityEmoji(f.priority)}${f.priority}] ${f.plantDescription}**
-- 설치 방법: ${this.getPlantMethodKorean(f.plantMethod)}
-- 핵심 키워드: ${f.keywords.join(', ')}
-- 관련 인물: ${f.relatedCharacters.join(', ')}
-- ⚠️ 너무 노골적으로 설치하지 마세요. 자연스럽게 녹여넣으세요.
-- 회수 예정: ${f.payoffTargetVolume ? `${f.payoffTargetVolume}권 ${f.payoffTargetScene}씬` : '미정'}
-`;
+    const mention: ForeshadowingMention = {
+      chapterId,
+      sceneId,
+      chapterNumber,
+      sceneOrder,
+      mentionType: 'payoff',
+      context,
+      subtlety: 1,
+      createdAt: new Date(),
+    };
+
+    plan.mentions.push(mention);
+    plan.status = 'paid-off';
+    plan.updatedAt = new Date();
+    return plan;
+  }
+
+  checkThreeTimeRule(foreshadowingId: string): {
+    passes: boolean;
+    mentionCount: number;
+    recommendation: string;
+  } {
+    const plan = this.foreshadowings.get(foreshadowingId);
+    if (!plan) {
+      return {
+        passes: false,
+        mentionCount: 0,
+        recommendation: 'Foreshadowing not found.',
+      };
+    }
+
+    const prePayoffMentions = plan.mentions.filter(m => m.mentionType !== 'payoff');
+    const count = prePayoffMentions.length;
+
+    const minMentions = {
+      'critical': 4,
+      'major': 3,
+      'minor': 2,
+      'easter-egg': 1,
+    };
+
+    const required = minMentions[plan.importance];
+    const passes = count >= required;
+
+    let recommendation = '';
+    if (!passes) {
+      const needed = required - count;
+      recommendation = `"${plan.title}" needs ${needed} more mentions before payoff.`;
+    } else {
+      recommendation = 'Ready for payoff.';
+    }
+
+    return { passes, mentionCount: count, recommendation };
+  }
+
+  validateChekhovGun(currentChapter: number, totalChapters: number): ForeshadowingIssue[] {
+    const issues: ForeshadowingIssue[] = [];
+    const progressPercent = (currentChapter / totalChapters) * 100;
+
+    const allPlans = Array.from(this.foreshadowings.values());
+    for (const plan of allPlans) {
+      if (plan.type === 'red-herring') continue;
+
+      const isPlanted = plan.mentions.some(m => m.mentionType === 'plant');
+      const isPaidOff = plan.status === 'paid-off';
+
+      if (isPlanted && !isPaidOff) {
+        const expectedPayoffChapter = plan.payoffPlan.targetChapter;
+        const isOverdue = currentChapter > expectedPayoffChapter;
+        const isNearEnd = progressPercent > 80;
+
+        if (isOverdue) {
+          issues.push({
+            type: 'chekhov-violation',
+            severity: 'critical',
+            foreshadowingId: plan.id,
+            message: `"${plan.title}" should have been paid off by chapter ${expectedPayoffChapter}`,
+            suggestion: 'Pay off immediately or reschedule',
+          });
+        } else if (isNearEnd && plan.importance === 'critical') {
+          issues.push({
+            type: 'chekhov-violation',
+            severity: 'warning',
+            foreshadowingId: plan.id,
+            message: `"${plan.title}" (critical) still unpaid at 80% progress`,
+            suggestion: 'Ensure payoff in final chapters',
+          });
+        }
       }
     }
 
-    // 이번 씬에서 강화할 복선
-    if (toReinforce.length > 0) {
-      guide += `\n### 🔄 이번 씬에서 강화(리마인드)할 복선\n`;
-      for (const f of toReinforce) {
-        guide += `
-**${f.plantDescription}** (${f.plantedInVolume}권 ${f.plantedInScene}씬에서 설치됨)
-- 강화 방법: 간접적으로 떠올리게 하세요 (직접 언급 X)
-- 관련 키워드: ${f.keywords.join(', ')} 중 1-2개를 자연스럽게 배치
-`;
-      }
-    }
-
-    // 이번 씬에서 회수할 복선
-    if (toResolve.length > 0) {
-      guide += `\n### ✅ 이번 씬에서 회수할 복선\n`;
-      for (const f of toResolve) {
-        guide += `
-**[${this.getPriorityEmoji(f.priority)}] ${f.plantDescription}**
-- 회수 방법: ${f.payoffDescription || '미정'}
-- 회수 기법: ${f.payoffMethod ? this.getPayoffMethodKorean(f.payoffMethod) : '미정'}
-- ⚠️ 독자가 "아, 그때 그거!" 하고 깨달을 수 있도록 연결 고리를 명확히 하세요.
-`;
-      }
-    }
-
-    // 활성 모티프
-    if (activeMotifs.length > 0) {
-      guide += `\n### 🔁 반복 모티프 (자연스럽게 배치)\n`;
-      for (const m of activeMotifs) {
-        guide += `- **${m.name}** (${m.symbol}): ${m.meaning} - ${m.evolution}\n`;
-      }
-    }
-
-    // 미해결 복선 경고
-    if (unresolvedWarnings.length > 0) {
-      guide += `\n### ⚠️ 미해결 복선 경고\n`;
-      for (const warning of unresolvedWarnings) {
-        guide += `- ${warning}\n`;
-      }
-    }
-
-    // 기본 지침
-    guide += `
-### 📖 복선 기본 원칙
-
-1. **체호프의 총**: 의미 없는 디테일을 넣지 마세요. 모든 언급은 나중에 의미가 있어야 합니다.
-2. **3번 법칙**: 중요한 복선은 최소 3번 언급/암시 후 회수하세요.
-3. **간접 암시**: 직접 말하지 말고 행동, 환경, 대화를 통해 암시하세요.
-4. **의외성**: 회수 시 독자의 예상을 약간 비틀어 놀라움을 주세요.
-5. **레드 헤링**: 진짜 복선을 숨기기 위해 가짜 단서를 적절히 배치하세요.
-`;
-
-    return guide;
+    return issues;
   }
 
-  /**
-   * 전체 복선 상태 요약
-   */
-  generateStatusReport(): string {
-    const all = Array.from(this.foreshadowings.values());
-    const planted = all.filter(f => f.status === 'planted');
-    const reinforced = all.filter(f => f.status === 'reinforced');
-    const resolved = all.filter(f => f.status === 'resolved');
-    const abandoned = all.filter(f => f.status === 'abandoned');
-
-    return `
-## 복선 상태 보고서
-
-| 상태 | 개수 |
-|------|------|
-| 🌱 설치됨 | ${planted.length} |
-| 🔄 강화됨 | ${reinforced.length} |
-| ✅ 회수됨 | ${resolved.length} |
-| ❌ 포기됨 | ${abandoned.length} |
-
-### 미회수 복선 목록
-${all.filter(f => f.status !== 'resolved' && f.status !== 'abandoned')
-  .map(f => `- [${f.priority}] ${f.plantDescription} (${f.plantedInVolume}권 ${f.plantedInScene}씬)`)
-  .join('\n')}
-`;
-  }
-
-  // ============================================
-  // Private Helper Methods
-  // ============================================
-
-  private getForeshadowingsToPlant(scene: number, volume: number): Foreshadowing[] {
-    return Array.from(this.foreshadowings.values()).filter(
-      f => f.plantedInScene === scene && f.plantedInVolume === volume && f.status === 'planted'
-    );
-  }
-
-  private getForeshadowingsToReinforce(scene: number, volume: number): Foreshadowing[] {
-    return Array.from(this.foreshadowings.values()).filter(f => {
-      if (f.status === 'resolved' || f.status === 'abandoned') return false;
-
-      // 설치 후 일정 간격으로 강화 필요
-      const sceneDistance = (volume - f.plantedInVolume) * 50 + (scene - f.plantedInScene);
-      return sceneDistance > 5 && sceneDistance % 10 < 3; // 10씬마다 근처에서 강화
+  getActiveForeshadowings(currentChapter: number): ForeshadowingPlan[] {
+    return Array.from(this.foreshadowings.values()).filter(plan => {
+      const isPlanted = plan.mentions.some(m => m.mentionType === 'plant');
+      const isPaidOff = plan.status === 'paid-off';
+      return isPlanted && !isPaidOff;
     });
   }
 
-  private getForeshadowingsToResolve(scene: number, volume: number): Foreshadowing[] {
-    return Array.from(this.foreshadowings.values()).filter(
-      f => f.payoffTargetScene === scene && f.payoffTargetVolume === volume
-    );
-  }
+  getWateringRecommendations(currentChapter: number): Array<{
+    plan: ForeshadowingPlan;
+    urgency: 'high' | 'medium' | 'low';
+    reason: string;
+  }> {
+    const recommendations: Array<{
+      plan: ForeshadowingPlan;
+      urgency: 'high' | 'medium' | 'low';
+      reason: string;
+    }> = [];
 
-  private getActiveMotifs(scene: number, volume: number): RecurringMotif[] {
-    return Array.from(this.motifs.values()).filter(m => {
-      const lastAppearance = m.appearances[m.appearances.length - 1];
-      if (!lastAppearance) return true;
+    const allPlansForWater = Array.from(this.foreshadowings.values());
+    for (const plan of allPlansForWater) {
+      if (plan.status === 'paid-off') continue;
 
-      const distance = (volume - lastAppearance.volumeNumber) * 50 + (scene - lastAppearance.sceneNumber);
-      return distance >= m.targetFrequency;
-    });
-  }
-
-  private getUnresolvedWarnings(scene: number, volume: number): string[] {
-    const warnings: string[] = [];
-
-    for (const f of Array.from(this.foreshadowings.values())) {
-      if (f.status === 'resolved' || f.status === 'abandoned') continue;
-
-      // 회수 예정 씬을 지났는데 아직 미회수
-      if (f.payoffTargetVolume && f.payoffTargetScene) {
-        if (volume > f.payoffTargetVolume || (volume === f.payoffTargetVolume && scene > f.payoffTargetScene)) {
-          warnings.push(
-            `❗ "${f.plantDescription}" 복선이 예정 회수 시점(${f.payoffTargetVolume}권 ${f.payoffTargetScene}씬)을 지났습니다!`
-          );
+      for (const waterPlan of plan.waterPlans) {
+        if (waterPlan.targetChapter === currentChapter) {
+          recommendations.push({
+            plan,
+            urgency: 'high',
+            reason: `Scheduled watering in chapter ${currentChapter}`,
+          });
+        } else if (waterPlan.targetChapter === currentChapter + 1) {
+          recommendations.push({
+            plan,
+            urgency: 'medium',
+            reason: 'Watering scheduled for next chapter',
+          });
         }
       }
 
-      // 너무 오래 방치된 복선
-      const distance = (volume - f.plantedInVolume) * 50 + (scene - f.plantedInScene);
-      if (distance > 100 && f.priority === 'critical') {
-        warnings.push(
-          `⚠️ "${f.plantDescription}" 핵심 복선이 ${distance}씬 동안 미회수 상태입니다.`
-        );
+      const threeTimeCheck = this.checkThreeTimeRule(plan.id);
+      if (!threeTimeCheck.passes && plan.payoffPlan.targetChapter - currentChapter <= 3) {
+        recommendations.push({
+          plan,
+          urgency: 'high',
+          reason: threeTimeCheck.recommendation,
+        });
       }
     }
 
-    return warnings;
+    return recommendations;
   }
 
-  private getPriorityEmoji(priority: Foreshadowing['priority']): string {
-    switch (priority) {
-      case 'critical': return '🔴';
-      case 'major': return '🟠';
-      case 'minor': return '🟡';
-      case 'subtle': return '🟢';
+  getPayoffReadyForeshadowings(currentChapter: number): ForeshadowingPlan[] {
+    return Array.from(this.foreshadowings.values()).filter(plan => {
+      if (plan.status === 'paid-off') return false;
+      if (plan.payoffPlan.targetChapter === currentChapter) return true;
+      const threeTimeCheck = this.checkThreeTimeRule(plan.id);
+      return threeTimeCheck.passes && plan.status === 'payoff-ready';
+    });
+  }
+
+  getStats(): ForeshadowingStats {
+    const stats: ForeshadowingStats = {
+      total: this.foreshadowings.size,
+      planted: 0,
+      watered: 0,
+      paidOff: 0,
+      forgotten: 0,
+      redHerrings: 0,
+      chekhovViolations: [],
+    };
+
+    const allPlansForStats = Array.from(this.foreshadowings.values());
+    for (const plan of allPlansForStats) {
+      switch (plan.status) {
+        case 'planted':
+          stats.planted++;
+          break;
+        case 'watered':
+        case 'payoff-ready':
+          stats.watered++;
+          break;
+        case 'paid-off':
+          stats.paidOff++;
+          break;
+        case 'forgotten':
+          stats.forgotten++;
+          stats.chekhovViolations.push(plan.id);
+          break;
+      }
+      if (plan.type === 'red-herring') {
+        stats.redHerrings++;
+      }
+    }
+
+    return stats;
+  }
+
+  generateForeshadowingGuidelines(currentChapter: number, currentScene: number): string {
+    const active = this.getActiveForeshadowings(currentChapter);
+    const waterRecs = this.getWateringRecommendations(currentChapter);
+    const payoffReady = this.getPayoffReadyForeshadowings(currentChapter);
+
+    let guidelines = `\n## Foreshadowing Guide (Ch.${currentChapter} Sc.${currentScene})\n\n`;
+
+    if (active.length > 0) {
+      guidelines += `### Active Foreshadowings (${active.length})\n`;
+      for (const plan of active) {
+        const mentionCount = plan.mentions.length;
+        guidelines += `- **${plan.title}** [${plan.type}] - ${mentionCount} mentions\n`;
+        guidelines += `  - ${plan.description}\n`;
+      }
+      guidelines += '\n';
+    }
+
+    if (waterRecs.length > 0) {
+      guidelines += `### Reinforce This Chapter\n`;
+      for (const rec of waterRecs) {
+        const urgencyMark = rec.urgency === 'high' ? '[URGENT]' :
+                            rec.urgency === 'medium' ? '[RECOMMENDED]' : '[OPTIONAL]';
+        guidelines += `${urgencyMark} **${rec.plan.title}**: ${rec.reason}\n`;
+      }
+      guidelines += '\n';
+    }
+
+    if (payoffReady.length > 0) {
+      guidelines += `### Ready for Payoff\n`;
+      for (const plan of payoffReady) {
+        guidelines += `- **${plan.title}**: ${plan.payoffPlan.method}\n`;
+        guidelines += `  - Impact: ${plan.payoffPlan.impact}\n`;
+      }
+      guidelines += '\n';
+    }
+
+    return guidelines;
+  }
+
+  generateSceneChecklist(chapterId: string, sceneId: string, currentChapter: number): string[] {
+    const checklist: string[] = [];
+
+    const allPlansForChecklist = Array.from(this.foreshadowings.values());
+    for (const plan of allPlansForChecklist) {
+      if (plan.plantPlan.targetChapter === currentChapter && plan.status !== 'planted') {
+        checklist.push(`[PLANT] "${plan.title}" - Method: ${plan.plantPlan.method}`);
+      }
+    }
+
+    const waterRecs = this.getWateringRecommendations(currentChapter).filter(r => r.urgency === 'high');
+    for (const rec of waterRecs) {
+      checklist.push(`[WATER] "${rec.plan.title}" - ${rec.reason}`);
+    }
+
+    const payoffReady = this.getPayoffReadyForeshadowings(currentChapter);
+    for (const plan of payoffReady) {
+      if (plan.payoffPlan.targetChapter === currentChapter) {
+        checklist.push(`[PAYOFF] "${plan.title}" - Impact: ${plan.payoffPlan.impact}`);
+      }
+    }
+
+    return checklist;
+  }
+
+  getAllForeshadowings(): ForeshadowingPlan[] {
+    return Array.from(this.foreshadowings.values());
+  }
+
+  getForeshadowing(id: string): ForeshadowingPlan | undefined {
+    return this.foreshadowings.get(id);
+  }
+
+  updateForeshadowing(id: string, updates: Partial<ForeshadowingPlan>): ForeshadowingPlan | null {
+    const plan = this.foreshadowings.get(id);
+    if (!plan) return null;
+
+    const updated = {
+      ...plan,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.foreshadowings.set(id, updated);
+    return updated;
+  }
+
+  deleteForeshadowing(id: string): boolean {
+    return this.foreshadowings.delete(id);
+  }
+}
+
+export const FORESHADOWING_TEMPLATES: Record<ForeshadowingType, {
+  name: string;
+  description: string;
+  plantingTips: string[];
+  wateringTips: string[];
+  payoffTips: string[];
+}> = {
+  'chekhov-gun': {
+    name: "Chekhov's Gun",
+    description: 'Item/character introduced early becomes crucial later',
+    plantingTips: ['Hide in background description', 'Mention casually'],
+    wateringTips: ['Brief reminder', 'Different context'],
+    payoffTips: ['Decisive moment', 'Clear connection'],
+  },
+  'character-hint': {
+    name: 'Character Hint',
+    description: 'Subtle hints about hidden nature or past',
+    plantingTips: ['Subtle behavior patterns', 'Small inconsistencies'],
+    wateringTips: ['Similar patterns repeat', 'Other reactions'],
+    payoffTips: ['Truth revealed', 'All hints connect'],
+  },
+  'plot-seed': {
+    name: 'Plot Seed',
+    description: 'Small element foreshadowing future events',
+    plantingTips: ['Casual dialogue', 'Environmental detail'],
+    wateringTips: ['Related small events', 'Different perspectives'],
+    payoffTips: ['Event occurs', 'Causal link clear'],
+  },
+  'symbol': {
+    name: 'Symbol/Motif',
+    description: 'Recurring image reinforcing theme',
+    plantingTips: ['Visual image', 'Character-linked object'],
+    wateringTips: ['Variations', 'New contexts'],
+    payoffTips: ['Climax completion', 'Unified meaning'],
+  },
+  'prophecy': {
+    name: 'Prophecy',
+    description: 'Direct future hints',
+    plantingTips: ['Ambiguous wording', 'Multiple interpretations'],
+    wateringTips: ['Partial fulfillment', 'Different interpretations'],
+    payoffTips: ['Unexpected fulfillment', 'Ironic completion'],
+  },
+  'red-herring': {
+    name: 'Red Herring',
+    description: 'Intentional misdirection',
+    plantingTips: ['Plant like real foreshadowing', 'Plausible evidence'],
+    wateringTips: ['Add evidence', 'Hide real clues'],
+    payoffTips: ['Reveal with twist', 'Explain misdirection'],
+  },
+  'callback': {
+    name: 'Callback',
+    description: 'Earlier scene/dialogue gains new meaning',
+    plantingTips: ['Memorable line', 'Distinctive phrase'],
+    wateringTips: ['Similar situations', 'Contrasting context'],
+    payoffTips: ['Decisive callback', 'Emotional resonance'],
+  },
+  'thematic': {
+    name: 'Thematic Foreshadowing',
+    description: 'Theme reinforcement through parallel stories',
+    plantingTips: ['Mini-story episodes', 'Secondary character experiences'],
+    wateringTips: ['Different scales', 'Protagonist connection grows'],
+    payoffTips: ['Protagonist embodies theme', 'All variations unite'],
+  },
+  'mystery-clue': {
+    name: 'Mystery Clue',
+    description: 'Key hints for puzzle resolution',
+    plantingTips: ['Hide among info', 'Seem unimportant'],
+    wateringTips: ['New context', 'Partial connections'],
+    payoffTips: ['Detective reasoning', 'Fair play satisfaction'],
+  },
+};
+
+export function suggestPlantingMethod(type: ForeshadowingType, subtlety: number): string[] {
+  const template = FORESHADOWING_TEMPLATES[type];
+  const suggestions: string[] = [];
+
+  if (subtlety >= 4) {
+    suggestions.push('Weave into background naturally');
+    suggestions.push('Mention during other important dialogue');
+    suggestions.push('Express through unconscious behavior');
+  } else if (subtlety >= 2) {
+    suggestions.push('Character dialogue indirect mention');
+    suggestions.push('Brief independent scene');
+    suggestions.push('Other character POV observation');
+  } else {
+    suggestions.push('Direct scene emphasis');
+    suggestions.push('Narrator explicit mention');
+    suggestions.push('Multiple character reactions');
+  }
+
+  suggestions.push(...template.plantingTips);
+  return suggestions;
+}
+
+export function createRedHerring(
+  projectId: string,
+  targetMystery: string,
+  misdirection: string
+): Partial<ForeshadowingPlan> {
+  return {
+    projectId,
+    type: 'red-herring',
+    title: `[Red Herring] ${misdirection}`,
+    description: `Truth: Hide ${targetMystery} by misdirecting to ${misdirection}`,
+    status: 'planted',
+    importance: 'minor',
+    plantPlan: {
+      targetChapter: 0,
+      method: 'Present plausible evidence/motive',
+      subtlety: 2,
+      context: '',
+    },
+    waterPlans: [{
+      targetChapter: 0,
+      method: 'Reinforce with additional evidence',
+      subtlety: 2,
+    }],
+    payoffPlan: {
+      targetChapter: 0,
+      method: 'Reveal truth and invalidate red herring',
+      impact: 'shocking',
+      buildup: 'When reader fully believes',
+    },
+    relatedCharacters: [],
+    relatedLocations: [],
+    relatedItems: [],
+    connectedForeshadowings: [],
+    notes: 'Warning: Too obvious backfires. Guide reader to deduce themselves.',
+  };
+}
+
+export function analyzeForeshadowingDensity(
+  plans: ForeshadowingPlan[],
+  totalChapters: number
+): Map<number, { count: number; overloaded: boolean; plans: ForeshadowingPlan[] }> {
+  const density = new Map<number, { count: number; overloaded: boolean; plans: ForeshadowingPlan[] }>();
+
+  for (let i = 1; i <= totalChapters; i++) {
+    density.set(i, { count: 0, overloaded: false, plans: [] });
+  }
+
+  for (const plan of plans) {
+    const plantChapter = plan.plantPlan.targetChapter;
+    if (plantChapter && density.has(plantChapter)) {
+      const data = density.get(plantChapter)!;
+      data.count++;
+      data.plans.push(plan);
+    }
+
+    for (const water of plan.waterPlans) {
+      if (water.targetChapter && density.has(water.targetChapter)) {
+        const data = density.get(water.targetChapter)!;
+        data.count++;
+        data.plans.push(plan);
+      }
+    }
+
+    const payoffChapter = plan.payoffPlan.targetChapter;
+    if (payoffChapter && density.has(payoffChapter)) {
+      const data = density.get(payoffChapter)!;
+      data.count++;
+      data.plans.push(plan);
     }
   }
 
-  private getPlantMethodKorean(method: PlantMethod): string {
-    const map: Record<PlantMethod, string> = {
-      dialogue: '대화 속에 자연스럽게 삽입',
-      description: '배경/환경 묘사에 숨기기',
-      action: '행동/사건을 통해 보여주기',
-      'internal-thought': '캐릭터의 내면 독백으로',
-      environmental: '환경/날씨/계절 변화로 암시',
-      symbolic: '상징적 이미지/물건으로 암시',
-    };
-    return map[method];
+  const densityEntries = Array.from(density.entries());
+  for (const [, data] of densityEntries) {
+    if (data.count >= 5) {
+      data.overloaded = true;
+    }
   }
 
-  private getPayoffMethodKorean(method: PayoffMethod): string {
-    const map: Record<PayoffMethod, string> = {
-      revelation: '진실이 밝혀짐',
-      confrontation: '직접 대면/직면',
-      consequence: '결과가 발생함',
-      callback: '과거 장면의 콜백',
-      twist: '반전으로 회수',
-      resolution: '문제가 해결됨',
-    };
-    return map[method];
-  }
+  return density;
 }
 
 export default ForeshadowingTracker;
