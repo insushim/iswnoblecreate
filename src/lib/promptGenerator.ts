@@ -1344,15 +1344,6 @@ ${sd.avoid.map(a => `- ❌ ${a}`).join('\n')}
   // 분량보다 종료조건이 훨씬 더 중요함을 명확히 전달
   // ============================================
 
-  // 🔒 디버그 로그 - 씬 데이터가 실제로 전달되는지 확인
-  console.log('[promptGenerator] 🎯 씬 프롬프트 생성 시작');
-  console.log('[promptGenerator] 씬 제목:', scene.title);
-  console.log('[promptGenerator] 장소:', scene.location);
-  console.log('[promptGenerator] 등장인물:', scene.participants);
-  console.log('[promptGenerator] 시작조건:', scene.startCondition);
-  console.log('[promptGenerator] 종료조건:', scene.endCondition);
-  console.log('[promptGenerator] 목표글자수:', scene.targetWordCount);
-
   // 🔴 NEW v5.0: 다음 씬 정보 추출 (미리 쓰면 안 되는 내용)
   const allScenes = volume.scenes || [];
   const currentSceneIndex = allScenes.findIndex(s => s.id === scene.id || s.sceneNumber === scene.sceneNumber);

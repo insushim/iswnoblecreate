@@ -116,7 +116,7 @@ export function AIGeneratePanel({
   const { settings } = useSettingsStore();
   const { currentProject } = useProjectStore();
   const { volumes, currentVolume, currentScene, setCurrentVolume, setCurrentScene, validateVolumeEndPoints, updateWordCount, getVolumeProgress } = useVolumeStore();
-  const { settings: worldSettings } = useWorldStore();
+  const { worldSettings } = useWorldStore();
   const { plotStructure, foreshadowings, conflicts } = usePlotStore();
   const { characters: allCharacters } = useCharacterStore();
 

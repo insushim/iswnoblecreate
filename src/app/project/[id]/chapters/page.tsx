@@ -83,7 +83,7 @@ export default function ChaptersPage() {
   const { settings } = useSettingsStore();
   const { volumes, fetchVolumes } = useVolumeStore();
   const { characters, fetchCharacters } = useCharacterStore();
-  const { settings: worldSettings, fetchWorldSettings } = useWorldStore();
+  const { worldSettings, fetchWorldSettings } = useWorldStore();
   const { plotStructure, foreshadowings, conflicts, fetchPlotStructure, fetchForeshadowings, fetchConflicts } = usePlotStore();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);

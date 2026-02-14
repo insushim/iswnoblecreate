@@ -4,7 +4,7 @@ import './globals.css';
 import { ClientLayout } from './ClientLayout';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://novelforge-ai.vercel.app'),
+  metadataBase: new URL('https://iswnoblecreate.vercel.app'),
   title: {
     default: 'NovelForge AI - AI 소설 창작 스튜디오',
     template: '%s | NovelForge AI',
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ko_KR',
-    url: 'https://novelforge-ai.vercel.app',
+    url: 'https://iswnoblecreate.vercel.app',
     siteName: 'NovelForge AI',
     title: 'NovelForge AI - AI 소설 창작 스튜디오',
     description:
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
   },
   verification: {},
   alternates: {
-    canonical: 'https://novelforge-ai.vercel.app',
+    canonical: 'https://iswnoblecreate.vercel.app',
   },
   icons: {
     icon: '/icon',
@@ -69,7 +69,7 @@ const jsonLd = {
   '@type': 'WebApplication',
   name: 'NovelForge AI',
   description: 'AI 소설 창작 스튜디오 - 캐릭터 설계, 플롯 구조, 세계관 구축부터 출판까지',
-  url: 'https://novelforge-ai.vercel.app',
+  url: 'https://iswnoblecreate.vercel.app',
   applicationCategory: 'CreativeWork',
   operatingSystem: 'Web',
   inLanguage: 'ko',

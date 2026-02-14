@@ -82,7 +82,6 @@ export class OfflineQueue {
     if (typeof window === 'undefined') return;
 
     window.addEventListener('online', () => {
-      console.log('[OfflineQueue] 온라인 복구됨');
       this.isOnline = true;
       this.onOnlineRestored?.();
 
@@ -92,7 +91,6 @@ export class OfflineQueue {
     });
 
     window.addEventListener('offline', () => {
-      console.log('[OfflineQueue] 오프라인 감지됨');
       this.isOnline = false;
       this.onOfflineDetected?.();
     });
@@ -115,7 +113,6 @@ export class OfflineQueue {
         this.queue = this.queue.filter(
           req => req.status === 'pending' || req.status === 'processing'
         );
-        console.log(`[OfflineQueue] ${this.queue.length}개 요청 로드됨`);
       }
     } catch (error) {
       console.warn('[OfflineQueue] 저장된 큐 로드 실패:', error);
@@ -173,7 +170,6 @@ export class OfflineQueue {
       } catch (error) {
         // 네트워크 오류면 큐에 추가
         if (error instanceof Error && error.message.includes('network')) {
-          console.log('[OfflineQueue] 네트워크 오류, 큐에 추가');
         } else {
           throw error;
         }
@@ -211,8 +207,6 @@ export class OfflineQueue {
 
     this.saveToStorage();
     this.onQueueChange?.(this.queue);
-
-    console.log(`[OfflineQueue] 요청 큐에 추가됨 (ID: ${request.id})`);
 
     // Promise 반환 (동기화 시 resolve됨)
     return new Promise((resolve, reject) => {
@@ -258,12 +252,10 @@ export class OfflineQueue {
     }
 
     if (!this.isOnline) {
-      console.log('[OfflineQueue] 오프라인 상태, 동기화 스킵');
       return;
     }
 
     this.isSyncing = true;
-    console.log(`[OfflineQueue] ${this.queue.length}개 요청 동기화 시작`);
 
     const results: Array<{ id: string; success: boolean; result?: string; error?: string }> = [];
 
@@ -281,7 +273,6 @@ export class OfflineQueue {
         request.result = result;
         results.push({ id: request.id, success: true, result });
 
-        console.log(`[OfflineQueue] 요청 완료: ${request.id}`);
       } catch (error) {
         request.retryCount++;
 
@@ -309,8 +300,6 @@ export class OfflineQueue {
     // 완료된 요청 정리
     this.queue = this.queue.filter(r => r.status === 'pending' || r.status === 'processing');
     this.saveToStorage();
-
-    console.log('[OfflineQueue] 동기화 완료');
   }
 
   /**
@@ -352,7 +341,6 @@ export class OfflineQueue {
     this.saveToStorage();
     this.onQueueChange?.(this.queue);
 
-    console.log(`[OfflineQueue] 요청 취소됨: ${requestId}`);
     return true;
   }
 
@@ -363,7 +351,6 @@ export class OfflineQueue {
     this.queue = [];
     this.saveToStorage();
     this.onQueueChange?.(this.queue);
-    console.log('[OfflineQueue] 큐 초기화됨');
   }
 
   /**

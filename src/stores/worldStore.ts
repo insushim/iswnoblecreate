@@ -3,7 +3,6 @@ import { db, createDefaultWorldSetting } from '@/lib/db';
 import { WorldSetting, DictionaryEntry, Location } from '@/types';
 
 interface WorldState {
-  settings: WorldSetting[];
   worldSettings: WorldSetting[];
   dictionary: DictionaryEntry[];
   locations: Location[];
@@ -34,7 +33,6 @@ interface WorldState {
 }
 
 export const useWorldStore = create<WorldState>((set, get) => ({
-  settings: [],
   worldSettings: [],
   dictionary: [],
   locations: [],
@@ -45,11 +43,11 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   fetchWorldSettings: async (projectId: string) => {
     set({ isLoading: true, error: null, currentSetting: null });
     try {
-      const settings = await db.worldSettings
+      const worldSettings = await db.worldSettings
         .where('projectId')
         .equals(projectId)
         .toArray();
-      set({ settings, worldSettings: settings, isLoading: false });
+      set({ worldSettings, isLoading: false });
     } catch (error) {
       set({ error: '세계관 설정을 불러오는데 실패했습니다.', isLoading: false });
     }
@@ -60,8 +58,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     try {
       const newSetting = createDefaultWorldSetting(projectId, data);
       await db.worldSettings.add(newSetting);
-      const settings = [...get().settings, newSetting];
-      set({ settings, worldSettings: settings, currentSetting: newSetting, isLoading: false });
+      const worldSettings = [...get().worldSettings, newSetting];
+      set({ worldSettings, currentSetting: newSetting, isLoading: false });
       return newSetting;
     } catch (error) {
       set({ error: '세계관 설정 생성에 실패했습니다.', isLoading: false });
@@ -75,7 +73,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       const updatedData = { ...data, updatedAt: new Date() };
       await db.worldSettings.update(id, updatedData);
 
-      const settings = get().settings.map(s =>
+      const worldSettings = get().worldSettings.map(s =>
         s.id === id ? { ...s, ...updatedData } : s
       );
 
@@ -84,7 +82,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
         set({ currentSetting: { ...currentSetting, ...updatedData } });
       }
 
-      set({ settings, worldSettings: settings, isLoading: false });
+      set({ worldSettings, isLoading: false });
     } catch (error) {
       set({ error: '세계관 설정 업데이트에 실패했습니다.', isLoading: false });
     }
@@ -94,11 +92,10 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await db.worldSettings.delete(id);
-      const settings = get().settings.filter(s => s.id !== id);
+      const worldSettings = get().worldSettings.filter(s => s.id !== id);
       const currentSetting = get().currentSetting;
       set({
-        settings,
-        worldSettings: settings,
+        worldSettings,
         currentSetting: currentSetting?.id === id ? null : currentSetting,
         isLoading: false
       });

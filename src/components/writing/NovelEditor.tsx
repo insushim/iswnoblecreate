@@ -92,6 +92,7 @@ export function NovelEditor({ content, onChange, placeholder, readOnly }: NovelE
             className="h-8 w-8"
             onClick={() => editor.chain().focus().toggleBold().run()}
             data-active={editor.isActive('bold')}
+            aria-label="굵게"
           >
             <Bold className="h-4 w-4" />
           </Button>
@@ -101,6 +102,7 @@ export function NovelEditor({ content, onChange, placeholder, readOnly }: NovelE
             className="h-8 w-8"
             onClick={() => editor.chain().focus().toggleItalic().run()}
             data-active={editor.isActive('italic')}
+            aria-label="기울임"
           >
             <Italic className="h-4 w-4" />
           </Button>
@@ -110,6 +112,7 @@ export function NovelEditor({ content, onChange, placeholder, readOnly }: NovelE
             className="h-8 w-8"
             onClick={() => editor.chain().focus().toggleStrike().run()}
             data-active={editor.isActive('strike')}
+            aria-label="취소선"
           >
             <Strikethrough className="h-4 w-4" />
           </Button>
@@ -119,6 +122,7 @@ export function NovelEditor({ content, onChange, placeholder, readOnly }: NovelE
             className="h-8 w-8"
             onClick={() => editor.chain().focus().toggleHighlight().run()}
             data-active={editor.isActive('highlight')}
+            aria-label="형광펜"
           >
             <Highlighter className="h-4 w-4" />
           </Button>
@@ -131,6 +135,7 @@ export function NovelEditor({ content, onChange, placeholder, readOnly }: NovelE
             className="h-8 w-8"
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
+            aria-label="실행취소"
           >
             <Undo className="h-4 w-4" />
           </Button>
@@ -140,6 +145,7 @@ export function NovelEditor({ content, onChange, placeholder, readOnly }: NovelE
             className="h-8 w-8"
             onClick={() => editor.chain().focus().redo().run()}
             disabled={!editor.can().redo()}
+            aria-label="다시실행"
           >
             <Redo className="h-4 w-4" />
           </Button>

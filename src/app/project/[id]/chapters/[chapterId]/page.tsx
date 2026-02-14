@@ -32,9 +32,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import dynamic from 'next/dynamic';
 import { NovelEditor } from '@/components/writing/NovelEditor';
-import { AIGeneratePanel } from '@/components/writing/AIGeneratePanel';
-import { CharacterStatusTracker } from '@/components/writing/CharacterStatusTracker';
 import { LoadingSpinner } from '@/components/common';
 import { useChapterStore } from '@/stores/chapterStore';
 import { useCharacterStore } from '@/stores/characterStore';
@@ -43,9 +42,10 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorldStore } from '@/stores/worldStore';
 import { usePlotStore } from '@/stores/plotStore';
 import { generateText } from '@/lib/gemini';
-import { saveAs } from 'file-saver';
-import { jsPDF } from 'jspdf';
 import { Chapter } from '@/types';
+
+const AIGeneratePanel = dynamic(() => import('@/components/writing/AIGeneratePanel').then(m => ({ default: m.AIGeneratePanel })), { ssr: false });
+const CharacterStatusTracker = dynamic(() => import('@/components/writing/CharacterStatusTracker').then(m => ({ default: m.CharacterStatusTracker })), { ssr: false });
 
 const statusOptions: { value: Chapter['status']; label: string }[] = [
   { value: 'outline', label: '개요' },
@@ -551,8 +551,10 @@ ${isLastScene && remainingLength < 8000
   };
 
   // 현재 챕터 TXT로 내보내기
-  const exportChapterToTxt = () => {
+  const exportChapterToTxt = async () => {
     if (!currentChapter) return;
+
+    const { saveAs } = await import('file-saver');
 
     let exportContent = `제 ${currentChapter.number}장: ${currentChapter.title}\n`;
     exportContent += `${'─'.repeat(40)}\n\n`;
@@ -565,8 +567,10 @@ ${isLastScene && remainingLength < 8000
   };
 
   // 현재 챕터 마크다운으로 내보내기
-  const exportChapterToMarkdown = () => {
+  const exportChapterToMarkdown = async () => {
     if (!currentChapter) return;
+
+    const { saveAs } = await import('file-saver');
 
     let exportContent = `# 제 ${currentChapter.number}장: ${currentChapter.title}\n\n`;
     exportContent += htmlToPlainText(content);
@@ -577,8 +581,10 @@ ${isLastScene && remainingLength < 8000
   };
 
   // 현재 챕터 HTML로 내보내기
-  const exportChapterToHtml = () => {
+  const exportChapterToHtml = async () => {
     if (!currentChapter) return;
+
+    const { saveAs } = await import('file-saver');
 
     const html = `<!DOCTYPE html>
 <html lang="ko">
@@ -618,6 +624,8 @@ ${isLastScene && remainingLength < 8000
   // 현재 챕터 PDF로 내보내기
   const exportChapterToPdf = async () => {
     if (!currentChapter) return;
+
+    const { jsPDF } = await import('jspdf');
 
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -667,8 +675,10 @@ ${isLastScene && remainingLength < 8000
   };
 
   // 현재 챕터 JSON으로 백업
-  const exportChapterToJson = () => {
+  const exportChapterToJson = async () => {
     if (!currentChapter) return;
+
+    const { saveAs } = await import('file-saver');
 
     const data = {
       exportedAt: new Date().toISOString(),

@@ -180,7 +180,6 @@ export class APICache {
     try {
       // Dexie에 apiCache 테이블이 없으면 추가
       if (!db.tables.find(t => t.name === 'apiCache')) {
-        console.log('[APICache] DB 테이블 생성 필요 - 스킵하고 메모리 캐시만 사용');
         this.isDbInitialized = false;
         return;
       }
@@ -264,7 +263,6 @@ export class APICache {
         this.moveToHead(memoryNode);
 
         const response = entry.compressed ? decompressText(entry.response) : entry.response;
-        console.log(`[APICache] 메모리 캐시 히트! 절약된 토큰: ${entry.tokenCount}`);
         return { hit: true, response, source: 'memory' };
       } else {
         // 만료된 항목 제거
@@ -295,7 +293,6 @@ export class APICache {
           this.moveToHead(node);
 
           const response = entry.compressed ? decompressText(entry.response) : entry.response;
-          console.log(`[APICache] 유사도 캐시 히트! (${(similarity * 100).toFixed(1)}%) 절약된 토큰: ${entry.tokenCount}`);
           return { hit: true, response, source: 'similarity' };
         }
       }
@@ -371,7 +368,6 @@ export class APICache {
       this.memoryCache.set(key, node);
     }
 
-    console.log(`[APICache] 캐시 저장: ${response.length}자, 키: ${key.slice(0, 8)}...`);
   }
 
   /**
@@ -383,7 +379,6 @@ export class APICache {
       this.memoryCache.clear();
       this.head = null;
       this.tail = null;
-      console.log('[APICache] 전체 캐시 무효화');
       return;
     }
 
@@ -399,7 +394,6 @@ export class APICache {
     }
 
     keysToDelete.forEach(key => this.memoryCache.delete(key));
-    console.log(`[APICache] ${keysToDelete.length}개 캐시 무효화`);
   }
 
   /**
@@ -415,10 +409,6 @@ export class APICache {
         this.memoryCache.delete(key);
         cleaned++;
       }
-    }
-
-    if (cleaned > 0) {
-      console.log(`[APICache] ${cleaned}개 만료 캐시 정리`);
     }
 
     return cleaned;
@@ -458,7 +448,6 @@ export class APICache {
    * 캐시 프리페치 (자주 사용되는 프롬프트 미리 로드)
    */
   async prefetch(prompts: Array<{ prompt: string; model: string }>): Promise<void> {
-    console.log(`[APICache] ${prompts.length}개 프롬프트 프리페치 준비`);
     // 실제 프리페치는 호출측에서 API를 호출하고 결과를 저장해야 함
     // 여기서는 키만 준비
   }
@@ -469,9 +458,7 @@ export class APICache {
   async warmup(): Promise<void> {
     if (!this.isDbInitialized) return;
 
-    console.log('[APICache] 캐시 워밍업 시작...');
     // DB가 없으므로 스킵
-    console.log('[APICache] 캐시 워밍업 완료');
   }
 }
 

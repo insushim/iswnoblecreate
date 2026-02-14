@@ -3,7 +3,8 @@
  * Theme, Symbol, Metaphor, Foreshadowing system
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+// Anthropic SDK는 API 호출 메서드에서만 동적 import로 사용
+type AnthropicClient = { messages: { create: (params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }> } };
 
 // Types
 export type ThemeType =
@@ -264,10 +265,18 @@ const THEME_EXPRESSIONS: Record<ThemeType, {
 };
 
 export class LiteraryDepthEngine {
-  private client: Anthropic;
+  private client: AnthropicClient | null = null;
 
-  constructor() {
-    this.client = new Anthropic();
+  private async getClient(): Promise<AnthropicClient> {
+    if (!this.client) {
+      try {
+        const Anthropic = (await import(/* webpackIgnore: true */ '@anthropic-ai/sdk' as string)).default;
+        this.client = new Anthropic() as unknown as AnthropicClient;
+      } catch {
+        throw new Error('@anthropic-ai/sdk 패키지가 설치되지 않았습니다. npm install @anthropic-ai/sdk를 실행해주세요.');
+      }
+    }
+    return this.client;
   }
 
   async designThemeLayer(
@@ -306,13 +315,14 @@ Themes should be revealed through story and characters, not explained directly.
 
 Respond in JSON.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -358,13 +368,14 @@ Symbols should:
 
 Respond as JSON array.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -408,13 +419,14 @@ Principles:
 
 Respond as JSON array.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -452,13 +464,14 @@ Add subtext layer to this scene:
 
 Respond in JSON.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -499,13 +512,14 @@ Each:
 
 Respond as JSON array.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2500,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -547,13 +561,14 @@ Each:
 
 Respond as JSON array.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -590,13 +605,14 @@ Each:
 
 Respond as JSON array.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2500,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -629,13 +645,14 @@ Each:
 
 Respond as JSON array.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -675,13 +692,14 @@ Judge strictly by bestseller + literary award standards.
 
 Respond in JSON.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -731,13 +749,14 @@ Add literary depth to the original:
 Express through images and actions, not direct explanation.
 Output only the modified text.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
     return text || content;
   }
 
@@ -843,13 +862,14 @@ Evaluate:
 
 Respond in JSON.`;
 
-    const response = await this.client.messages.create({
+    const client = await this.getClient();
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
