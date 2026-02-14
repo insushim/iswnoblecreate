@@ -1,6 +1,10 @@
-import { jsPDF } from 'jspdf';
-import { saveAs } from 'file-saver';
 import { Project, Chapter, Character } from '@/types';
+
+// Lazy loaders for bundle optimization
+async function lazySaveAs(blob: Blob, filename: string): Promise<void> {
+  const { saveAs } = await import('file-saver');
+  saveAs(blob, filename);
+}
 
 // HTML을 순수 텍스트로 변환
 function htmlToText(html: string): string {
@@ -17,11 +21,11 @@ function htmlToText(html: string): string {
 }
 
 // TXT 내보내기
-export function exportToTxt(
+export async function exportToTxt(
   project: Project,
   chapters: Chapter[],
   options?: { includeMetadata?: boolean }
-): void {
+): Promise<void> {
   let content = '';
 
   if (options?.includeMetadata) {
@@ -54,15 +58,15 @@ export function exportToTxt(
   }
 
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  saveAs(blob, `${project.title}.txt`);
+  await lazySaveAs(blob, `${project.title}.txt`);
 }
 
 // HTML 내보내기
-export function exportToHtml(
+export async function exportToHtml(
   project: Project,
   chapters: Chapter[],
   options?: { includeStyles?: boolean }
-): void {
+): Promise<void> {
   const sortedChapters = [...chapters].sort((a, b) => a.number - b.number);
 
   let html = `<!DOCTYPE html>
@@ -121,15 +125,15 @@ export function exportToHtml(
 </html>`;
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  saveAs(blob, `${project.title}.html`);
+  await lazySaveAs(blob, `${project.title}.html`);
 }
 
 // Markdown 내보내기
-export function exportToMarkdown(
+export async function exportToMarkdown(
   project: Project,
   chapters: Chapter[],
   options?: { includeMetadata?: boolean }
-): void {
+): Promise<void> {
   let content = '';
 
   content += `# ${project.title}\n\n`;
@@ -160,7 +164,7 @@ export function exportToMarkdown(
   }
 
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  saveAs(blob, `${project.title}.md`);
+  await lazySaveAs(blob, `${project.title}.md`);
 }
 
 // PDF 내보내기 (한글 폰트 지원을 위한 기본 구현)
@@ -176,8 +180,7 @@ export async function exportToPdf(
   const fontSize = options?.fontSize || 12;
   const lineHeight = options?.lineHeight || 1.5;
 
-  // jsPDF는 한글 폰트를 기본 지원하지 않아 HTML을 통해 내보내기
-  // 실제 프로덕션에서는 한글 폰트를 임베드하거나 html2canvas 등을 사용
+  const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -314,17 +317,16 @@ export async function exportToEpub(
 </body>
 </html>`;
 
-  // XHTML로 저장 (실제 EPUB은 JSZip으로 패키징 필요)
   const blob = new Blob([content], { type: 'application/xhtml+xml;charset=utf-8' });
-  saveAs(blob, `${project.title}.xhtml`);
+  await lazySaveAs(blob, `${project.title}.xhtml`);
 }
 
 // JSON 내보내기 (백업용)
-export function exportToJson(
+export async function exportToJson(
   project: Project,
   chapters: Chapter[],
   characters: Character[]
-): void {
+): Promise<void> {
   const data = {
     exportedAt: new Date().toISOString(),
     version: '1.0',
@@ -336,14 +338,14 @@ export function exportToJson(
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: 'application/json;charset=utf-8',
   });
-  saveAs(blob, `${project.title}_backup.json`);
+  await lazySaveAs(blob, `${project.title}_backup.json`);
 }
 
 // 캐릭터 프로필 내보내기
-export function exportCharacterProfiles(
+export async function exportCharacterProfiles(
   project: Project,
   characters: Character[]
-): void {
+): Promise<void> {
   let content = `# ${project.title} - 캐릭터 프로필\n\n`;
 
   const roleOrder = ['protagonist', 'deuteragonist', 'antagonist', 'supporting', 'minor', 'mentioned'];
@@ -377,7 +379,7 @@ export function exportCharacterProfiles(
   }
 
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  saveAs(blob, `${project.title}_characters.md`);
+  await lazySaveAs(blob, `${project.title}_characters.md`);
 }
 
 function getRoleLabel(role: Character['role']): string {

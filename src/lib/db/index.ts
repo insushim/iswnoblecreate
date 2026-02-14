@@ -66,29 +66,22 @@ export const db = new NovelForgeDB();
 
 // 기본 앱 설정 초기화
 export async function initializeAppSettings(): Promise<AppSettings> {
-  console.log('[DB] initializeAppSettings 호출됨');
 
   const envApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  console.log('[DB] 환경 변수 API 키 존재:', !!envApiKey, '길이:', envApiKey?.length || 0);
 
   try {
     const existingSettings = await db.appSettings.get('default');
-    console.log('[DB] 기존 설정 조회 결과:', !!existingSettings);
 
     if (existingSettings) {
-      console.log('[DB] 기존 설정 발견, API 키 존재:', !!existingSettings.geminiApiKey);
-      console.log('[DB] 기존 API 키 길이:', existingSettings.geminiApiKey?.length || 0);
 
       // 환경 변수에 API 키가 있으면 항상 사용 (서버 설정 우선)
       if (envApiKey) {
-        console.log('[DB] 환경 변수 API 키로 덮어쓰기');
         existingSettings.geminiApiKey = envApiKey;
         await db.appSettings.update('default', { geminiApiKey: envApiKey });
       }
 
       // 모델 설정이 없으면 기본값 추가 (기존 사용자 마이그레이션)
       if (!existingSettings.planningModel || !existingSettings.writingModel) {
-        console.log('[DB] 모델 설정 없음, 기본값 추가');
         existingSettings.planningModel = existingSettings.planningModel || 'gemini-3-flash-preview';
         existingSettings.writingModel = existingSettings.writingModel || 'gemini-2.0-flash';
         await db.appSettings.update('default', {
@@ -100,12 +93,10 @@ export async function initializeAppSettings(): Promise<AppSettings> {
       // gemini-3-flash -> gemini-3-flash-preview 마이그레이션 (DB에 구버전 모델명이 저장된 경우)
       let needsUpdate = false;
       if ((existingSettings.planningModel as string) === 'gemini-3-flash') {
-        console.log('[DB] planningModel 마이그레이션: gemini-3-flash -> gemini-3-flash-preview');
         existingSettings.planningModel = 'gemini-3-flash-preview';
         needsUpdate = true;
       }
       if ((existingSettings.writingModel as string) === 'gemini-3-flash') {
-        console.log('[DB] writingModel 마이그레이션: gemini-3-flash -> gemini-3-flash-preview');
         existingSettings.writingModel = 'gemini-3-flash-preview';
         needsUpdate = true;
       }
@@ -114,14 +105,11 @@ export async function initializeAppSettings(): Promise<AppSettings> {
           planningModel: existingSettings.planningModel,
           writingModel: existingSettings.writingModel,
         });
-        console.log('[DB] ✅ 모델 마이그레이션 완료');
       }
 
-      console.log('[DB] ✅ 기존 설정 반환');
       return existingSettings;
     }
 
-    console.log('[DB] 기존 설정 없음, 새 설정 생성 중...');
     const defaultSettings: AppSettings = {
       id: 'default',
       theme: 'dark',
@@ -137,10 +125,8 @@ export async function initializeAppSettings(): Promise<AppSettings> {
     };
 
     await db.appSettings.add(defaultSettings);
-    console.log('[DB] ✅ 새 설정 저장 완료');
     return defaultSettings;
   } catch (error) {
-    console.error('[DB] ❌ initializeAppSettings 오류:', error);
     throw error;
   }
 }

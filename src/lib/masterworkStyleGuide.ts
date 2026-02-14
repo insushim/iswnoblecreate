@@ -642,7 +642,7 @@ export function findClicheAlternative(text: string): {
   return { found: false };
 }
 
-export default {
+export const masterworkStyleGuide = {
   AUTHOR_STYLES,
   STYLE_APPLICATIONS,
   CLICHE_ALTERNATIVES,
@@ -650,3 +650,5 @@ export default {
   generateHybridStylePrompt,
   findClicheAlternative,
 };
+
+export default masterworkStyleGuide;

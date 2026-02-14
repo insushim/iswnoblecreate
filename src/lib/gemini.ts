@@ -31,6 +31,7 @@ export const MODEL_OPTIONS: { value: GeminiModel; label: string; description: st
 // Rate Limit 방지를 위한 마지막 요청 시간 추적
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1500; // 최소 1.5초 간격
+const MAX_PROMPT_LENGTH = 1_000_000; // 프롬프트 최대 길이 (약 100만자)
 
 // ============================================
 // 텍스트 후처리 시스템 (깨진 문자 필터링)
@@ -396,19 +397,13 @@ async function waitForRateLimit(): Promise<void> {
   const timeSinceLastRequest = now - lastRequestTime;
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
     const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-    console.log(`[Gemini] Rate limit: waiting ${waitTime}ms before next request`);
     await new Promise(resolve => setTimeout(resolve, waitTime));
   }
   lastRequestTime = Date.now();
 }
 
 export function initGemini(apiKey: string): GoogleGenerativeAI {
-  console.log('[Gemini] initGemini called');
-  console.log('[Gemini] API key exists:', !!apiKey);
-  console.log('[Gemini] API key length:', apiKey?.length || 0);
-
   genAI = new GoogleGenerativeAI(apiKey);
-  console.log('[Gemini] GoogleGenerativeAI instance created');
   return genAI;
 }
 
@@ -428,29 +423,30 @@ export async function generateText(
     model?: GeminiModel; // 모델 선택 옵션 추가
   }
 ): Promise<string> {
-  console.log('[Gemini] generateText called');
-  console.log('[Gemini] API key valid:', !!apiKey, 'length:', apiKey?.length || 0);
-  console.log('[Gemini] Prompt length:', prompt?.length || 0);
 
   if (!apiKey) {
-    console.error('[Gemini] No API key!');
     throw new Error('API 키가 설정되지 않았습니다. 설정에서 Gemini API 키를 등록해주세요.');
   }
 
-  if (apiKey.length < 10) {
-    console.error('[Gemini] API key too short:', apiKey.length);
+  if (apiKey.length < 39) {
     throw new Error('API 키가 유효하지 않습니다. 올바른 API 키를 입력해주세요.');
+  }
+
+  if (!prompt || prompt.trim().length === 0) {
+    throw new Error('프롬프트가 비어있습니다.');
+  }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    throw new Error(`프롬프트가 너무 깁니다. 최대 ${MAX_PROMPT_LENGTH.toLocaleString()}자까지 허용됩니다. (현재: ${prompt.length.toLocaleString()}자)`);
   }
 
   try {
     const ai = initGemini(apiKey);
     const modelName = options?.model || 'gemini-2.0-flash';
-    console.log('[Gemini] Creating model:', modelName);
 
     // 🔴 v2.0: maxTokens 기본값을 4096으로 대폭 하향 (씬 범위 초과 방지)
     // 8192 → 4096: 씬당 평균 3000~4000자에 맞춤
     const maxOutputTokens = options?.maxTokens ?? 4096;
-    console.log('[Gemini] Setting maxOutputTokens:', maxOutputTokens, '(기본값 4096으로 하향)');
 
     const model = ai.getGenerativeModel({
       model: modelName,
@@ -462,8 +458,6 @@ export async function generateText(
       },
     });
 
-    console.log('[Gemini] Model created, generating content...');
-
     // Rate Limit 방지를 위한 대기
     await waitForRateLimit();
 
@@ -474,54 +468,41 @@ export async function generateText(
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const result = await model.generateContent(prompt);
-        console.log('[Gemini] Content generated, processing response...');
 
         const response = await result.response;
 
         // 상세 디버깅: 응답 구조 확인
-        console.log('[Gemini] Response candidates:', response.candidates?.length || 0);
         if (response.candidates && response.candidates.length > 0) {
           const candidate = response.candidates[0];
-          console.log('[Gemini] Finish reason:', candidate.finishReason);
-          console.log('[Gemini] Safety ratings:', JSON.stringify(candidate.safetyRatings));
 
           // 콘텐츠 필터링으로 차단된 경우
           if (candidate.finishReason === 'SAFETY') {
-            console.error('[Gemini] Content blocked by safety filter');
             throw new Error('콘텐츠가 안전 필터에 의해 차단되었습니다. 프롬프트를 수정해주세요.');
           }
           if (candidate.finishReason === 'RECITATION') {
-            console.error('[Gemini] Content blocked due to recitation');
             throw new Error('콘텐츠가 저작권 문제로 차단되었습니다.');
           }
         }
 
         // promptFeedback 확인 (프롬프트 자체가 차단된 경우)
         if (response.promptFeedback) {
-          console.log('[Gemini] Prompt feedback:', JSON.stringify(response.promptFeedback));
           if (response.promptFeedback.blockReason) {
-            console.error('[Gemini] Prompt blocked:', response.promptFeedback.blockReason);
             throw new Error(`프롬프트가 차단되었습니다: ${response.promptFeedback.blockReason}`);
           }
         }
 
         let text = response.text();
 
-        console.log('[Gemini] Response text length (raw):', text?.length || 0);
-
         // 텍스트 후처리 - 깨진 문자 정리
         if (text) {
           text = cleanGeneratedText(text);
-          console.log('[Gemini] Response text length (cleaned):', text?.length || 0);
         }
 
         // 빈 응답 체크
         if (!text || text.trim().length === 0) {
-          console.warn(`[Gemini] Empty response on attempt ${attempt}/${maxRetries}`);
           if (attempt < maxRetries) {
             // Rate Limit 가능성이 높으므로 더 긴 대기 (2초, 4초, 6초)
             const waitTime = 2000 * attempt;
-            console.log(`[Gemini] Waiting ${waitTime}ms before retry...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
             continue;
           }
@@ -530,7 +511,6 @@ export async function generateText(
 
         return text;
       } catch (retryError) {
-        console.error(`[Gemini] Attempt ${attempt}/${maxRetries} failed:`, retryError);
         lastError = retryError instanceof Error ? retryError : new Error(String(retryError));
 
         // 재시도 불가능한 에러는 즉시 throw
@@ -542,7 +522,6 @@ export async function generateText(
         if (attempt < maxRetries) {
           // 에러 시 더 긴 대기 (3초, 6초)
           const waitTime = 3000 * attempt;
-          console.log(`[Gemini] Error retry: waiting ${waitTime}ms...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
@@ -550,12 +529,8 @@ export async function generateText(
 
     throw lastError || new Error('알 수 없는 오류가 발생했습니다.');
   } catch (error: unknown) {
-    console.error('[Gemini] generateText error:');
-    console.error('[Gemini] Error type:', typeof error);
-    console.error('[Gemini] Error object:', error);
 
     if (error instanceof Error) {
-      console.error('[Gemini] Error message:', error.message);
 
       if (error.message.includes('API_KEY_INVALID') || error.message.includes('API key not valid')) {
         throw new Error('API 키가 유효하지 않습니다. Google AI Studio에서 새 키를 발급받아주세요.');
@@ -587,11 +562,21 @@ export async function* generateTextStream(
     model?: GeminiModel; // 모델 선택 옵션 추가
   }
 ): AsyncGenerator<string, void, unknown> {
-  console.log('[Gemini] generateTextStream called');
 
   if (!apiKey) {
-    console.error('[Gemini] Streaming: No API key!');
     throw new Error('API 키가 설정되지 않았습니다.');
+  }
+
+  if (apiKey.length < 39) {
+    throw new Error('API 키가 유효하지 않습니다. 올바른 API 키를 입력해주세요.');
+  }
+
+  if (!prompt || prompt.trim().length === 0) {
+    throw new Error('프롬프트가 비어있습니다.');
+  }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    throw new Error(`프롬프트가 너무 깁니다. 최대 ${MAX_PROMPT_LENGTH.toLocaleString()}자까지 허용됩니다.`);
   }
 
   try {
@@ -608,7 +593,6 @@ export async function* generateTextStream(
       },
     });
 
-    console.log('[Gemini] Streaming started with model:', modelName);
     const result = await model.generateContentStream(prompt);
     let totalLength = 0;
 
@@ -620,12 +604,7 @@ export async function* generateTextStream(
       }
     }
 
-    console.log('[Gemini] Streaming complete, total length:', totalLength);
   } catch (error: unknown) {
-    console.error('[Gemini] generateTextStream error:', error);
-    if (error instanceof Error) {
-      console.error('[Gemini] Error message:', error.message);
-    }
     throw error;
   }
 }
@@ -640,10 +619,8 @@ export async function generateJSON<T>(
     model?: GeminiModel; // 모델 선택 옵션 추가
   }
 ): Promise<T> {
-  console.log('[Gemini] generateJSON called');
   // 기획/분석 작업이므로 기본 모델은 gemini-3-flash-preview
   const modelToUse = options?.model || 'gemini-3-flash-preview';
-  console.log('[Gemini] Using model:', modelToUse);
 
   // JSON 생성 시 더 많은 토큰 필요 (기본 16384)
   const jsonOptions = {
@@ -667,18 +644,13 @@ export async function generateJSON<T>(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[Gemini] JSON generation attempt ${attempt}/${maxRetries}`);
 
       const text = await generateText(apiKey, fullPrompt, jsonOptions);
 
-      console.log('[Gemini] JSON parsing, original length:', text?.length || 0);
-
       // 빈 응답 체크
       if (!text || text.trim().length === 0) {
-        console.warn(`[Gemini] Empty JSON response on attempt ${attempt}`);
         if (attempt < maxRetries) {
           const waitTime = 3000 * attempt;
-          console.log(`[Gemini] Waiting ${waitTime}ms before JSON retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
         }
@@ -705,26 +677,21 @@ export async function generateJSON<T>(
       const closeBrackets = (cleanedText.match(/]/g) || []).length;
 
       if (openBraces !== closeBraces || openBrackets !== closeBrackets) {
-        console.warn(`[Gemini] JSON appears truncated: braces ${openBraces}/${closeBraces}, brackets ${openBrackets}/${closeBrackets}`);
         if (attempt < maxRetries) {
           const waitTime = 3000 * attempt;
-          console.log(`[Gemini] Truncated JSON, waiting ${waitTime}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
         }
       }
 
       const parsed = JSON.parse(cleanedText) as T;
-      console.log('[Gemini] JSON parsed successfully');
       return parsed;
     } catch (error) {
-      console.error(`[Gemini] JSON attempt ${attempt}/${maxRetries} failed:`, error);
       lastError = error instanceof Error ? error : new Error(String(error));
 
       // JSON 파싱 에러는 재시도
       if (attempt < maxRetries) {
         const waitTime = 3000 * attempt;
-        console.log(`[Gemini] JSON parse error, waiting ${waitTime}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
@@ -732,7 +699,6 @@ export async function generateJSON<T>(
   }
 
   // 모든 재시도 실패
-  console.error('[Gemini] All JSON generation attempts failed');
   throw lastError || new Error('JSON 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
 }
 

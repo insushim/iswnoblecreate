@@ -944,11 +944,13 @@ export function getRecommendedTechniques(sceneType: SceneType): {
   }));
 }
 
-export default {
+export const literaryMasters = {
   MASTER_PROFILES,
   GENRE_RECOMMENDATIONS,
   generateMasterStylePrompt,
   generateBlendedStylePrompt,
   generateTechniquePrompt,
-  getRecommendedTechniques
+  getRecommendedTechniques,
 };
+
+export default literaryMasters;

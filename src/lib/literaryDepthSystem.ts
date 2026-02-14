@@ -787,7 +787,7 @@ export function generateLiteraryDepthPrompt(
   return prompt;
 }
 
-export default {
+export const literaryDepthSystem = {
   analyzeLiteraryDepth,
   generateLiteraryDepthPrompt,
   UNIVERSAL_HUMAN_CONDITIONS,
@@ -795,3 +795,5 @@ export default {
   EXCEPTIONAL_PROSE_ELEMENTS,
   SYMBOLIC_TECHNIQUES,
 };
+
+export default literaryDepthSystem;

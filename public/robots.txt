@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /project/
+Disallow: /settings/
+
+Sitemap: https://novelforge-ai.vercel.app/sitemap.xml

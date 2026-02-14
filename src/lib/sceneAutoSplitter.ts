@@ -11,7 +11,7 @@
  * - 시간 점프 완전 차단
  */
 
-import { SceneStructure, Character } from '@/types';
+import { SceneStructure, Character, GeminiModel } from '@/types';
 import { generateText } from './gemini';
 
 // ============================================
@@ -49,6 +49,19 @@ export interface SplitSceneResult {
   totalTargetWordCount: number;
   splitReason: string;
   recommendations: string[];
+}
+// AI 응답에서 파싱된 비트 데이터 형식
+interface ParsedBeatData {
+  beatNumber?: number;
+  title?: string;
+  targetWordCount?: number;
+  description?: string;
+  startMoment?: string;
+  endMoment?: string;
+  duration?: string;
+  mustInclude?: string[];
+  focusOn?: string;
+  forbidden?: string[];
 }
 
 // ============================================
@@ -132,7 +145,7 @@ export async function autoSplitScene(
   scene: SceneStructure,
   characters: Character[],
   previousContext?: string,
-  model: string = 'gemini-2.5-pro'
+  model: GeminiModel = 'gemini-2.5-pro'
 ): Promise<SplitSceneResult> {
   const analysis = analyzeSceneForSplit(scene);
 
@@ -224,7 +237,7 @@ ${previousContext || '(첫 씬)'}
     const response = await generateText(apiKey, prompt, {
       temperature: 0.7,
       maxTokens: 4096,
-      model: model as any,
+      model,
     });
 
     // JSON 파싱
@@ -247,7 +260,7 @@ ${previousContext || '(첫 씬)'}
     }
 
     // 비트 생성
-    const beats: SceneBeat[] = parsed.beats.map((b: any, idx: number) => ({
+    const beats: SceneBeat[] = parsed.beats.map((b: ParsedBeatData, idx: number) => ({
       id: crypto.randomUUID(),
       beatNumber: b.beatNumber || idx + 1,
       title: b.title || `비트 ${idx + 1}`,
