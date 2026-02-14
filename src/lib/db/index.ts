@@ -17,6 +17,7 @@ import {
   WritingSession,
   AppSettings,
 } from '@/types';
+import type { EditMark, EditSession } from '@/types/editor';
 
 // NovelForge 데이터베이스 클래스
 export class NovelForgeDB extends Dexie {
@@ -36,6 +37,8 @@ export class NovelForgeDB extends Dexie {
   researchNotes!: Table<ResearchNote>;
   writingSessions!: Table<WritingSession>;
   appSettings!: Table<AppSettings>;
+  editMarks!: Table<EditMark>;
+  editSessions!: Table<EditSession>;
 
   constructor() {
     super('NovelForgeDB');
@@ -57,6 +60,27 @@ export class NovelForgeDB extends Dexie {
       researchNotes: 'id, projectId, category, createdAt',
       writingSessions: 'id, projectId, startTime',
       appSettings: 'id',
+    });
+
+    this.version(2).stores({
+      projects: 'id, title, status, seriesId, createdAt, updatedAt',
+      characters: 'id, projectId, name, role, createdAt',
+      chapters: 'id, projectId, number, status, createdAt',
+      scenes: 'id, chapterId, order, status, createdAt',
+      worldSettings: 'id, projectId, category, importance, createdAt',
+      dictionary: 'id, projectId, term, category, createdAt',
+      locations: 'id, projectId, name, type, parentLocationId, createdAt',
+      plotStructures: 'id, projectId, template',
+      foreshadowings: 'id, projectId, status, priority, createdAt',
+      conflicts: 'id, projectId, type, status, createdAt',
+      analyses: 'id, targetType, targetId, createdAt',
+      expressions: 'id, projectId, category, subcategory, isFavorite, createdAt',
+      series: 'id, title, status, createdAt',
+      researchNotes: 'id, projectId, category, createdAt',
+      writingSessions: 'id, projectId, startTime',
+      appSettings: 'id',
+      editMarks: 'id, sceneId, chapterId, type, status, author, category, createdAt',
+      editSessions: 'id, projectId, chapterId, status, currentPhase, createdAt',
     });
   }
 }
