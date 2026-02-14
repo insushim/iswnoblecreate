@@ -242,8 +242,8 @@ export default function SceneEditorPage() {
           <SceneRewritePanel
             documentId={currentDocument.id}
             documentTitle={currentDocument.title}
-            onSave={(text) => {
-              console.log('Saved:', text.slice(0, 100) + '...');
+            onSave={() => {
+              // 저장 완료
             }}
           />
         ) : (

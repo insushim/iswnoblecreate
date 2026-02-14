@@ -197,8 +197,6 @@ export function AIGeneratePanel({
 
     try {
       setIsAnalyzing(true);
-      console.log('[AIGeneratePanel] 스토리 분석 시작...');
-
       const projectCharacters = allCharacters.filter(c => c.projectId === projectId);
       const result = await analyzeFullStory(
         settings.geminiApiKey,
@@ -214,7 +212,6 @@ export function AIGeneratePanel({
       setAnalysisWarnings(criticalWarnings);
       setStoryAnalysis(result);
 
-      console.log('[AIGeneratePanel] 스토리 분석 완료, 경고 수:', criticalWarnings.length);
       return result;
     } catch (error) {
       console.error('[AIGeneratePanel] 스토리 분석 실패:', error);
@@ -225,18 +222,12 @@ export function AIGeneratePanel({
   };
 
   const handleGenerate = async () => {
-    console.log('[AIGeneratePanel] handleGenerate 호출됨');
-    console.log('[AIGeneratePanel] settings 객체:', settings);
-    console.log('[AIGeneratePanel] API 키 존재 여부:', !!settings?.geminiApiKey);
-    console.log('[AIGeneratePanel] API 키 길이:', settings?.geminiApiKey?.length || 0);
-
     if (!settings?.geminiApiKey) {
       console.error('[AIGeneratePanel] ❌ API 키가 설정되지 않음!');
       setError('설정에서 Gemini API 키를 먼저 등록해주세요.');
       return;
     }
 
-    console.log('[AIGeneratePanel] 생성 시작...');
     setIsGenerating(true);
     setError('');
     setGeneratedContent('');
@@ -307,16 +298,11 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
 
 본문만 출력하세요.`;
 
-      console.log('[AIGeneratePanel] 프롬프트 생성 완료, 길이:', prompt.length);
-      console.log('[AIGeneratePanel] generateText 호출 중...');
-
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.85,
         maxTokens: Math.max(500, length[0] * 2),
         model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용 (씬 생성은 창의적 작업)
       });
-
-      console.log('[AIGeneratePanel] ✅ 응답 수신 완료, 길이:', response?.length || 0);
 
       // 텍스트 후처리 - 소설책 형식으로 정리
       const formatNovelText = (text: string): string => {
@@ -389,7 +375,6 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
       };
 
       const formattedContent = formatNovelText(response);
-      console.log('[AIGeneratePanel] 포맷팅 완료, 최종 길이:', formattedContent?.length || 0);
       setGeneratedContent(formattedContent);
     } catch (err: unknown) {
       console.error('[AIGeneratePanel] ❌ 생성 실패:');
@@ -404,7 +389,6 @@ ${customPrompt ? `- 추가: ${customPrompt}` : ''}
         setError('콘텐츠 생성에 실패했습니다. 다시 시도해주세요.');
       }
     } finally {
-      console.log('[AIGeneratePanel] 생성 프로세스 종료');
       setIsGenerating(false);
     }
   };
@@ -701,10 +685,6 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
         throw new Error('올바른 생성 모드를 선택해주세요.');
       }
 
-      console.log('[AIGeneratePanel] 구조화 프롬프트 생성 완료');
-      console.log('[AIGeneratePanel] 시스템 프롬프트 길이:', promptResult.systemPrompt.length);
-      console.log('[AIGeneratePanel] 유저 프롬프트 길이:', promptResult.userPrompt.length);
-
       // 전체 프롬프트 결합
       const fullPrompt = `${promptResult.systemPrompt}\n\n---\n\n${promptResult.userPrompt}`;
 
@@ -712,12 +692,8 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
 
       // 🚨 씬 생성 시 StreamGuard를 사용한 실시간 차단 적용
       if (structuredMode === 'scene' && selectedScene) {
-        console.log('[AIGeneratePanel] 🛡️ StreamGuard 실시간 차단 모드로 생성 시작');
-
         // 🔒 전체 캐릭터 이름 목록 (미허용 캐릭터 감지용)
         const allCharacterNames = charsToUse.map(c => c.name);
-        console.log('[AIGeneratePanel] 씬 허용 캐릭터:', selectedScene.participants);
-        console.log('[AIGeneratePanel] 전체 캐릭터 목록:', allCharacterNames);
 
         // StreamGuard 초기화
         const guard = new StreamGuard({
@@ -728,8 +704,8 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
             console.warn('[StreamGuard] 위반 감지:', violation);
             setStreamViolations(prev => [...prev, violation]);
           },
-          onEndConditionMet: (content) => {
-            console.log('[StreamGuard] ✅ 종료 조건 도달! 생성 중단');
+          onEndConditionMet: () => {
+            // 종료 조건 도달
           },
         });
 
@@ -744,13 +720,9 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
         // 이렇게 하면 AI가 미래 이야기를 쓸 공간이 없어짐
         const MAX_TOKENS_HARD_LIMIT = 5000; // 절대 상한선
         const maxTokensForScene = Math.min(MAX_TOKENS_HARD_LIMIT, Math.floor(promptResult.metadata.targetWordCount / 3));
-        console.log('[AIGeneratePanel] 🔒🔒🔒 maxTokens 강제 제한:', maxTokensForScene);
-        console.log('[AIGeneratePanel] 목표 글자수:', promptResult.metadata.targetWordCount, '→ 실제 토큰:', maxTokensForScene);
-        console.log('[AIGeneratePanel] ⚠️ 분량보다 종료조건 우선! 종료조건 도달 시 중단됨');
 
         // 🔒 집필용 모델 사용! (planningModel이 아닌 writingModel)
         const writingModelToUse = settings.writingModel || 'gemini-2.5-flash';
-        console.log('[AIGeneratePanel] 🎯 집필 모델:', writingModelToUse);
 
         const stream = generateTextStream(settings.geminiApiKey, fullPrompt, {
           temperature: 0.7, // 0.8 → 0.7로 낮춰서 더 예측 가능하게
@@ -767,7 +739,6 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
 
           // 차단되면 즉시 중단
           if (!result.shouldContinue) {
-            console.log('[AIGeneratePanel] 🛑 StreamGuard에 의해 생성 중단됨');
             break;
           }
         }
@@ -776,22 +747,12 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
         const guardResult = guard.getResult();
         setStreamGuardResult(guardResult);
 
-        console.log('[AIGeneratePanel] StreamGuard 결과:', {
-          wasTerminated: guardResult.wasTerminated,
-          terminationReason: guardResult.terminationReason,
-          endConditionReached: guardResult.endConditionReached,
-          violationsCount: guardResult.violations.length,
-          contentLength: guardResult.content.length,
-        });
-
         // 텍스트 후처리
         formattedContent = formatNovelText(guardResult.content);
 
         // 추가 검증 (sceneValidator 사용)
         const validation = validateSceneContent(formattedContent, selectedScene);
         setValidationResult(validation);
-
-        console.log('[AIGeneratePanel] 최종 검증 결과:', formatValidationResult(validation));
 
         // 결과 요약 메시지
         if (guardResult.wasTerminated && guardResult.endConditionReached) {
@@ -814,7 +775,6 @@ ${sceneRegeneratePrompt || '이 씬을 처음부터 다시 작성해주세요.'}
       } else {
         // 권 전체/이어쓰기는 기존 방식 사용 - 집필용 모델 사용!
         const writingModelForVolume = settings.writingModel || 'gemini-2.5-flash';
-        console.log('[AIGeneratePanel] 🎯 권 집필 모델:', writingModelForVolume);
 
         const response = await generateText(settings.geminiApiKey, fullPrompt, {
           temperature: 0.7,

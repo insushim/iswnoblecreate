@@ -163,7 +163,6 @@ export class RequestOptimizer {
       const pendingPromise = this.pendingPromises.get(requestId);
       if (pendingPromise) {
         this.metrics.deduplicatedRequests++;
-        console.log(`[RequestOptimizer] 중복 요청 감지, 기존 요청 결과 공유: ${requestId.slice(0, 8)}...`);
         return pendingPromise;
       }
     }
@@ -312,9 +311,6 @@ export class RequestOptimizer {
         !error.message.includes('취소')
       ) {
         request.retryCount++;
-        console.log(
-          `[RequestOptimizer] 재시도 ${request.retryCount}/${this.config.maxRetries}: ${request.id.slice(0, 8)}...`
-        );
 
         // 지수 백오프
         const delay = this.config.retryDelay * Math.pow(2, request.retryCount - 1);
@@ -373,7 +369,6 @@ export class RequestOptimizer {
       request.abortController.abort();
     });
 
-    console.log('[RequestOptimizer] 모든 요청 취소됨');
   }
 
   /**
@@ -414,7 +409,6 @@ export class RequestOptimizer {
   ): Promise<string> | null {
     // 쓰로틀 확인
     if (this.throttleTimers.has(key)) {
-      console.log(`[RequestOptimizer] 쓰로틀됨: ${key}`);
       return null;
     }
 

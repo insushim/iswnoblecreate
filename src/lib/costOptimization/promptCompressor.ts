@@ -176,8 +176,6 @@ export class PromptCompressor {
     this.stats.averageCompressionRatio =
       this.stats.totalCompressedTokens / this.stats.totalOriginalTokens;
 
-    console.log(`[PromptCompressor] 압축: ${originalTokens} → ${compressedTokens} 토큰 (${(ratio * 100).toFixed(1)}%)`);
-
     return {
       compressed,
       originalTokens,

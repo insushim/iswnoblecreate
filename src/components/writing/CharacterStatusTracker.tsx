@@ -195,7 +195,6 @@ export function CharacterStatusTracker({
           statusChangedAt: currentSceneId,
         });
       });
-      console.log('[CharacterStatusTracker] 자동 상태 변경:', detectedChanges);
     }
 
     return detectedChanges;

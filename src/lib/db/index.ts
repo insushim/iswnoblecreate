@@ -91,7 +91,7 @@ export const db = new NovelForgeDB();
 // 기본 앱 설정 초기화
 export async function initializeAppSettings(): Promise<AppSettings> {
 
-  const envApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  const envApiKey = '';
 
   try {
     const existingSettings = await db.appSettings.get('default');

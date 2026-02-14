@@ -48,10 +48,7 @@ export function CharacterInterview({ character, onClose }: CharacterInterviewPro
   }, [messages]);
 
   const handleSend = async (question?: string) => {
-    console.log('[CharacterInterview] handleSend 호출됨');
     const userQuestion = question || input;
-    console.log('[CharacterInterview] 질문:', userQuestion);
-    console.log('[CharacterInterview] API 키 존재:', !!settings?.geminiApiKey);
 
     if (!userQuestion.trim() || !settings?.geminiApiKey) {
       console.error('[CharacterInterview] ❌ 질문 없음 또는 API 키 없음');
@@ -112,12 +109,10 @@ ${userQuestion}
 
 답변만 출력해주세요 (따옴표나 캐릭터 이름 없이).`;
 
-      console.log('[CharacterInterview] generateText 호출 중...');
       const response = await generateText(settings.geminiApiKey, prompt, {
         temperature: 0.8,
         model: settings.planningModel || 'gemini-3-flash-preview' // 기획용 모델 사용
       });
-      console.log('[CharacterInterview] ✅ 응답 수신, 길이:', response?.length || 0);
 
       const characterMessage: Message = {
         id: crypto.randomUUID(),

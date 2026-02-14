@@ -255,11 +255,6 @@ export class CostTracker {
     // 예산 확인
     const budgetStatus = this.checkBudget();
 
-    console.log(
-      `[CostTracker] 기록: ${model}, 입력 ${inputTokens}, 출력 ${outputTokens}, ` +
-      `비용 $${cost.toFixed(4)}${options?.cached ? ' (캐시)' : ''}`
-    );
-
     return { cost, budgetStatus };
   }
 
@@ -317,7 +312,6 @@ export class CostTracker {
 
     // 예산의 80% 이상 사용했으면 무료 모델 추천
     if (this.budget.preferFreeModel && dailyCost >= this.budget.dailyLimit * 0.8) {
-      console.log('[CostTracker] 예산 근접으로 무료 모델 추천');
       return 'gemini-2.0-flash';
     }
 

@@ -1113,11 +1113,6 @@ export function generateScenePlanningPrompt(
   // 씬당 평균 분량 계산
   const averageWordsPerScene = Math.floor(targetWordCount / actualSceneCount);
 
-  console.log(`[ScenePromptGenerator] 🔴 v3.0 정교한 기획 모드`);
-  console.log(`[ScenePromptGenerator] 권 분량: ${targetWordCount.toLocaleString()}자`);
-  console.log(`[ScenePromptGenerator] 계산된 씬 수: ${actualSceneCount}개 (요청: ${targetSceneCount}개)`);
-  console.log(`[ScenePromptGenerator] 씬당 평균 분량: ${averageWordsPerScene.toLocaleString()}자`);
-
   return `당신은 **베스트셀러 소설 기획 전문가**입니다.
 아래 규칙을 **100% 준수**하여 씬 분할표를 작성하세요.
 

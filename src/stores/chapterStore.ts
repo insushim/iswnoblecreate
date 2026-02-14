@@ -131,9 +131,9 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         .sort((a, b) => a.number - b.number)
         .map((c, index) => ({ ...c, number: index + 1 }));
 
-      for (const c of remainingChapters) {
-        await db.chapters.update(c.id, { number: c.number });
-      }
+      await db.transaction('rw', db.chapters, async () => {
+        await Promise.all(remainingChapters.map(c => db.chapters.update(c.id, { number: c.number })));
+      });
 
       const currentChapter = get().currentChapter;
       set({
@@ -155,9 +155,9 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         return chapter ? { ...chapter, number: index + 1 } : null;
       }).filter((c): c is Chapter => c !== null);
 
-      for (const c of reorderedChapters) {
-        await db.chapters.update(c.id, { number: c.number, updatedAt: new Date() });
-      }
+      await db.transaction('rw', db.chapters, async () => {
+        await Promise.all(reorderedChapters.map(c => db.chapters.update(c.id, { number: c.number, updatedAt: new Date() })));
+      });
 
       set({ chapters: reorderedChapters, isLoading: false });
     } catch (error) {
@@ -262,10 +262,10 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         .equals(scene.chapterId)
         .sortBy('order');
 
-      for (let i = 0; i < remainingScenes.length; i++) {
-        await db.scenes.update(remainingScenes[i].id, { order: i + 1 });
-        remainingScenes[i].order = i + 1;
-      }
+      await db.transaction('rw', db.scenes, async () => {
+        await Promise.all(remainingScenes.map((s, i) => db.scenes.update(s.id, { order: i + 1 })));
+      });
+      remainingScenes.forEach((s, i) => { s.order = i + 1; });
 
       const currentChapter = get().currentChapter;
       if (currentChapter?.id === scene.chapterId) {
@@ -296,9 +296,9 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         return scene ? { ...scene, order: index + 1 } : null;
       }).filter((s): s is Scene => s !== null);
 
-      for (const s of reorderedScenes) {
-        await db.scenes.update(s.id, { order: s.order, updatedAt: new Date() });
-      }
+      await db.transaction('rw', db.scenes, async () => {
+        await Promise.all(reorderedScenes.map(s => db.scenes.update(s.id, { order: s.order, updatedAt: new Date() })));
+      });
 
       set({ currentChapter: { ...currentChapter, scenes: reorderedScenes }, isLoading: false });
     } catch (error) {

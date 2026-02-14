@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { db, initializeAppSettings } from '@/lib/db';
 import { AppSettings } from '@/types';
 
@@ -16,52 +15,46 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set, get) => ({
-      settings: null,
-      isLoading: false,
-      error: null,
+  (set, get) => ({
+    settings: null,
+    isLoading: false,
+    error: null,
 
-      initSettings: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          const settings = await initializeAppSettings();
-          set({ settings, isLoading: false });
-        } catch (error) {
-          console.error('[SettingsStore] 설정 로드 실패:', error);
-          set({ error: '설정을 불러오는데 실패했습니다.', isLoading: false });
+    initSettings: async () => {
+      set({ isLoading: true, error: null });
+      try {
+        const settings = await initializeAppSettings();
+        set({ settings, isLoading: false });
+      } catch (error) {
+        console.error('[SettingsStore] 설정 로드 실패:', error);
+        set({ error: '설정을 불러오는데 실패했습니다.', isLoading: false });
+      }
+    },
+
+    updateSettings: async (data: Partial<AppSettings>) => {
+      set({ isLoading: true, error: null });
+      try {
+        const currentSettings = get().settings;
+        if (!currentSettings) {
+          throw new Error('설정이 초기화되지 않았습니다.');
         }
-      },
 
-      updateSettings: async (data: Partial<AppSettings>) => {
-        set({ isLoading: true, error: null });
-        try {
-          const currentSettings = get().settings;
-          if (!currentSettings) {
-            throw new Error('설정이 초기화되지 않았습니다.');
-          }
+        const updatedSettings = { ...currentSettings, ...data };
+        await db.appSettings.update('default', data);
 
-          const updatedSettings = { ...currentSettings, ...data };
-          await db.appSettings.update('default', data);
+        set({ settings: updatedSettings, isLoading: false });
+      } catch (error) {
+        console.error('[SettingsStore] 설정 업데이트 실패:', error);
+        set({ error: '설정 업데이트에 실패했습니다.', isLoading: false });
+      }
+    },
 
-          set({ settings: updatedSettings, isLoading: false });
-        } catch (error) {
-          console.error('[SettingsStore] 설정 업데이트 실패:', error);
-          set({ error: '설정 업데이트에 실패했습니다.', isLoading: false });
-        }
-      },
+    setGeminiApiKey: async (key: string) => {
+      await get().updateSettings({ geminiApiKey: key });
+    },
 
-      setGeminiApiKey: async (key: string) => {
-        await get().updateSettings({ geminiApiKey: key });
-      },
-
-      clearError: () => {
-        set({ error: null });
-      },
-    }),
-    {
-      name: 'novel-forge-settings',
-      partialize: () => ({}),
-    }
-  )
+    clearError: () => {
+      set({ error: null });
+    },
+  })
 );

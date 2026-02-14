@@ -44,7 +44,6 @@ let config = { ...DEFAULT_CONFIG };
  */
 export function setOptimizationConfig(newConfig: Partial<OptimizationConfig>): void {
   config = { ...config, ...newConfig };
-  console.log('[OptimizedGemini] 설정 업데이트:', config);
 }
 
 /**
@@ -101,7 +100,7 @@ export async function optimizedGenerateText(
     savedTokens = compressed.originalTokens - compressed.compressedTokens;
 
     if (savedTokens > 0) {
-      console.log(`[OptimizedGemini] 프롬프트 압축: ${savedTokens} 토큰 절약`);
+      // 토큰 절약됨
     }
   }
 
@@ -110,8 +109,6 @@ export async function optimizedGenerateText(
     const cacheResult = await cache.get(finalPrompt, model);
 
     if (cacheResult.hit && cacheResult.response) {
-      console.log(`[OptimizedGemini] 캐시 히트! (${cacheResult.source})`);
-
       // 캐시 히트 비용 기록 (0원)
       if (config.enableCostTracking) {
         const outputTokens = estimateTokens(cacheResult.response);
@@ -145,9 +142,7 @@ export async function optimizedGenerateText(
       // 예산 경고 시 저비용 모델로 자동 다운그레이드
       actualModel = tracker.getRecommendedModel(taskType, 'low');
 
-      if (actualModel !== model) {
-        console.log(`[OptimizedGemini] 예산 경고: ${model} → ${actualModel} 다운그레이드`);
-      }
+      // 예산 경고로 다운그레이드 적용됨
     }
   }
 
@@ -233,8 +228,6 @@ export async function optimizedGenerateJSON<T>(
     const cacheResult = await cache.get(cacheKey, model);
 
     if (cacheResult.hit && cacheResult.response) {
-      console.log(`[OptimizedGemini] JSON 캐시 히트!`);
-
       try {
         const data = JSON.parse(cacheResult.response) as T;
 

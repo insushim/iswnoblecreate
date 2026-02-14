@@ -345,8 +345,6 @@ ${plotStructure.plotPoints.slice(0, 8).map(p => `- ${p.title}: ${p.description}`
         const sceneGoal = scene.goal || scene.summary || '';
         const sceneNotes = scene.conflict || '';
 
-        console.log(`[자동집필] 씬 ${sceneIndex + 1}/${scenes.length} 시작: ${scene.title} (목표: ${sceneTargetLength.toLocaleString()}자)`);
-
         let sceneContent = scene.content || '';
         let iteration = 0;
         const maxIterations = Math.ceil(sceneTargetLength / 4000) + 5; // 안전 여유분
@@ -363,8 +361,6 @@ ${plotStructure.plotPoints.slice(0, 8).map(p => `- ${p.title}: ${p.description}`
           const contextContent = isFirstGeneration
             ? previousSceneContent.slice(-2000)
             : sceneContent.slice(-2500);
-
-          console.log(`[자동집필] 씬 ${sceneIndex + 1} - ${iteration}회차: ${currentLength.toLocaleString()}/${sceneTargetLength.toLocaleString()}자 (${progress}%)`);
 
           const prompt = `당신은 한국의 베스트셀러 소설가입니다. 상업적으로 성공할 수준의 출판용 소설 원고를 작성합니다.
 
@@ -463,7 +459,6 @@ ${isLastScene && remainingLength < 8000
                   const overlapIndex = lastPart.indexOf(checkPart);
                   const overlapLength = 500 - overlapIndex;
                   formattedResponse = formattedResponse.slice(overlapLength);
-                  console.log(`[자동집필] 중복 ${overlapLength}자 제거`);
                   break;
                 }
               }
@@ -476,7 +471,6 @@ ${isLastScene && remainingLength < 8000
                 const firstPeriod = formattedResponse.search(/[.!?]\s+/);
                 if (firstPeriod > 0) {
                   formattedResponse = formattedResponse.slice(firstPeriod + 2);
-                  console.log(`[자동집필] 중복 문장 제거`);
                 }
               }
             }
@@ -515,15 +509,12 @@ ${isLastScene && remainingLength < 8000
         // 다음 씬을 위해 현재 씬 내용 저장
         previousSceneContent = sceneContent;
 
-        console.log(`[자동집필] 씬 ${sceneIndex + 1} 완료: ${sceneContent.length.toLocaleString()}자 (${iteration}회 생성)`);
-
         // 씬 간 대기
         if (sceneIndex < scenes.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
-      console.log(`[자동집필] 완료! 총 ${scenes.length}개 씬, ${totalGenerated.toLocaleString()}자 생성`);
       alert(`집필 완료! ${scenes.length}개 씬, 총 ${totalGenerated.toLocaleString()}자 생성됨`);
 
     } catch (error) {
@@ -909,8 +900,8 @@ ${isLastScene && remainingLength < 8000
               currentContent={content}
               currentSceneId={currentScene?.id}
               currentVolumeNumber={currentChapter.number}
-              onViolationDetected={(violations) => {
-                console.log('일관성 위반 감지:', violations);
+              onViolationDetected={() => {
+                // 일관성 위반 감지됨
               }}
             />
           </div>

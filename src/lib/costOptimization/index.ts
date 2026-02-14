@@ -87,7 +87,6 @@ export class CostOptimizationSystem {
   }) => Promise<string>): void {
     this.optimizer.setExecutor(executor);
     this.isInitialized = true;
-    console.log('[CostOptimization] 시스템 초기화 완료');
   }
 
   /**
@@ -120,7 +119,6 @@ export class CostOptimizationSystem {
           cached: true,
         });
 
-        console.log(`[CostOptimization] 캐시 히트! (${cacheResult.source})`);
         return {
           response: cacheResult.response,
           cached: true,
@@ -142,7 +140,6 @@ export class CostOptimizationSystem {
         options?.type || 'other',
         'low'
       );
-      console.log(`[CostOptimization] 예산 경고로 모델 다운그레이드: ${model} → ${actualModel}`);
     }
 
     // 5. 요청 실행 (최적화된 큐 통해)

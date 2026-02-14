@@ -165,7 +165,6 @@ export class StreamGuard {
       .filter(w => w.length >= 2);
 
     this.endConditionKeywords = words;
-    console.log('[StreamGuard] 종료 조건 키워드:', this.endConditionKeywords);
   }
 
   /**
@@ -201,7 +200,6 @@ export class StreamGuard {
         this.isTerminated = true;
         this.terminationReason = '종료 조건 도달';
 
-        console.log('[StreamGuard] 종료 조건 도달! 생성 중단');
         this.config.onEndConditionMet?.(this.accumulatedContent);
 
         return { shouldContinue: false, processedChunk: chunk };
@@ -278,7 +276,6 @@ export class StreamGuard {
 
       this.isTerminated = true;
       this.terminationReason = `절대 상한선(${ABSOLUTE_MAX_LENGTH}자) 도달로 인한 중단`;
-      console.log('[StreamGuard] 🛑🛑🛑 절대 상한선 도달! 생성 즉시 중단');
       return { shouldContinue: false, processedChunk: chunk, violation };
     }
 
@@ -297,15 +294,10 @@ export class StreamGuard {
 
       this.isTerminated = true;
       this.terminationReason = `글자수 60%(${Math.round(targetWordCount * 0.6)}자) 도달로 인한 중단 - 씬 범위 보호`;
-      console.log('[StreamGuard] 🛑 글자수 60% 도달! 씬 범위 보호를 위해 중단');
       return { shouldContinue: false, processedChunk: chunk, violation };
     }
 
     // 40% 도달 시 종료조건 적극 감지 모드
-    if (currentLength > targetWordCount * 0.4) {
-      console.log(`[StreamGuard] ⚠️ 글자수 ${Math.round(currentLength / targetWordCount * 100)}% 도달 - 종료조건 적극 감시 중`);
-    }
-
     // 5. 🔒 허용되지 않은 캐릭터 등장 감지
     const unauthorizedCharCheck = this.checkUnauthorizedCharacter(textToCheck);
     if (unauthorizedCharCheck.detected) {
@@ -345,7 +337,6 @@ export class StreamGuard {
         this.accumulatedContent = this.accumulatedContent.slice(0, checkStart + (nextSceneCheck.position || 0));
         this.isTerminated = true;
         this.terminationReason = `다음 씬 내용 감지로 인한 중단: "${nextSceneCheck.keyword}"`;
-        console.log('[StreamGuard] 🛑 다음 씬 내용 감지! 생성 중단');
         return { shouldContinue: false, processedChunk: '', violation };
       }
     }
@@ -578,7 +569,6 @@ export async function* guardedStreamGenerate(
       yield { chunk: result.processedChunk, guard };
 
       if (!result.shouldContinue) {
-        console.log('[StreamGuard] 생성 중단:', guard.getResult().terminationReason);
         break;
       }
     }
