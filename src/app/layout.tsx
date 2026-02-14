@@ -46,27 +46,21 @@ export const metadata: Metadata = {
     title: 'NovelForge AI - AI 소설 창작 스튜디오',
     description:
       'AI와 함께 전문 소설을 창작하세요. 캐릭터, 플롯, 세계관부터 출판까지.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'NovelForge AI - AI 소설 창작 스튜디오',
-      },
-    ],
+    images: ['/opengraph-image'],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'NovelForge AI - AI 소설 창작 스튜디오',
     description: 'AI와 함께 전문 소설을 창작하세요.',
-    images: ['/og-image.png'],
+    images: ['/opengraph-image'],
   },
   verification: {},
   alternates: {
     canonical: 'https://novelforge-ai.vercel.app',
   },
   icons: {
-    icon: '/favicon.ico',
+    icon: '/icon',
+    apple: '/apple-icon',
   },
 };
 
